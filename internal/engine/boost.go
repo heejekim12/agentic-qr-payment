@@ -12,6 +12,9 @@ const (
 	atomMinPct   = 3  // keeps ATOM clearly above USDC.inj after route cost
 	atomMaxPct   = 10 // caps sponsor cost
 	boostStepPct = 2  // largest change per update, in percentage points
+	capMinUSD    = 50 // per-user daily conversion limit bounds; 700 USD is about KRW 1,000,000
+	capMaxUSD    = 700
+	capStepUSD   = 100
 )
 
 // BoostState tells the operator how the current bonus was set.
@@ -29,6 +32,7 @@ type BoostState struct {
 
 type boostSuggestion struct {
 	ATOM   int64  `json:"atom_pct"`
+	CapUSD int64  `json:"daily_cap_usd"`
 	Reason string `json:"reason"`
 }
 
@@ -42,18 +46,23 @@ type boostFacts struct {
 	AffordPct    int64             `json:"max_atom_pct_pool_can_cover"`
 	Bounds       map[string]int64  `json:"bounds_pct"`
 	MaxStepPct   int               `json:"max_change_per_update_pct"`
+	UsersWithPts int64             `json:"users_holding_points"`
+	CapUSD       int64             `json:"current_daily_cap_usd"`
+	CapBounds    []int64           `json:"daily_cap_bounds_usd"`
+	CapStepUSD   int64             `json:"max_daily_cap_change_usd"`
 }
 
 const boostSystem = `You set redemption bonuses for a rewards program. Points redeem to ATOM (with a bonus) or USDC.inj (no bonus).
 Goals, in order: keep the reward pool solvent, keep ATOM the best value after route cost, and give ATOM a clear edge (about 5% net over USDC.inj) when the pool can afford it.
 Constraints: integers; atom_pct within bounds_pct atom_min..atom_max and at most max_atom_pct_pool_can_cover (if that is below atom_min, go below atom_min); atom_pct may differ from current_bonus_pct by at most max_change_per_update_pct.
+Also set daily_cap_usd, the most one user may convert per day: within daily_cap_bounds_usd, at most max_daily_cap_change_usd from current_daily_cap_usd, sized so that users_holding_points x daily_cap_usd stays a small share (about 10%) of reward_pool_usd.
 If ATOM's share of redeemed value is low, lean toward a larger ATOM edge. Reason: one short sentence with numbers from the facts.`
 
 var boostSchema = map[string]any{
-	"type": "object", "additionalProperties": false, "required": []string{"atom_pct", "reason"},
+	"type": "object", "additionalProperties": false, "required": []string{"atom_pct", "daily_cap_usd", "reason"},
 	"properties": map[string]any{
-		"atom_pct": map[string]any{"type": "integer"},
-		"reason":   map[string]any{"type": "string"},
+		"atom_pct": map[string]any{"type": "integer"}, "daily_cap_usd": map[string]any{"type": "integer"},
+		"reason": map[string]any{"type": "string"},
 	},
 }
 
@@ -64,7 +73,11 @@ func (e *Engine) boostFactsLocked() boostFacts {
 		RouteCostPct: map[Asset]float64{}, CurrentPct: map[Asset]int64{}, MaxStepPct: boostStepPct,
 		Bounds: map[string]int64{"atom_min": atomMinPct, "atom_max": atomMaxPct},
 	}
+	f.CapUSD, f.CapBounds, f.CapStepUSD = e.pool.DailyCap/Micro, []int64{capMinUSD, capMaxUSD}, capStepUSD
 	for _, u := range e.users {
+		if u.Points > 0 {
+			f.UsersWithPts++
+		}
 		f.LiabilityUSD += float64(u.Points*PointValue) / float64(Micro)
 	}
 	f.AffordPct = atomMaxPct
@@ -84,8 +97,10 @@ func netValue(bonusPct int64, routePct float64) float64 {
 	return (1 + float64(bonusPct)/100) * (1 - routePct/100)
 }
 
-func validBoost(atom int64, f boostFacts) error {
+func validBoost(atom, capUSD int64, f boostFacts) error {
 	switch {
+	case capUSD < capMinUSD || capUSD > capMaxUSD || abs64(capUSD-f.CapUSD) > capStepUSD:
+		return fmt.Errorf("daily cap outside $%d-%d or changed by more than $%d", capMinUSD, capMaxUSD, capStepUSD)
 	case atom < 0 || atom > atomMaxPct || (atom < atomMinPct && f.AffordPct >= atomMinPct):
 		return fmt.Errorf("ATOM bonus outside %d-%d%%", atomMinPct, atomMaxPct)
 	case abs64(atom-f.CurrentPct[ATOM]) > boostStepPct:
@@ -129,7 +144,11 @@ func ruleBoost(f boostFacts) boostSuggestion {
 		target = max(target, atomMinPct)
 	}
 	atom := clampStep(target, f.CurrentPct[ATOM])
-	return boostSuggestion{ATOM: atom, Reason: fmt.Sprintf(
+	users := max(f.UsersWithPts, 1)
+	capTarget := max(capMinUSD, min(capMaxUSD, int64(math.Round(f.PoolUSD*0.10/float64(users)))))
+	capUSD := max(f.CapUSD-capStepUSD, min(f.CapUSD+capStepUSD, capTarget))
+	capUSD = max(capMinUSD, min(capMaxUSD, capUSD))
+	return boostSuggestion{ATOM: atom, CapUSD: capUSD, Reason: fmt.Sprintf(
 		"Coverage %.0f%% allows up to %d%%; ATOM kept clear of its %.1f%% route cost.", f.CoveragePct, max(afford, 0), f.RouteCostPct[ATOM])}
 }
 
@@ -181,7 +200,7 @@ func (e *Engine) autoBoost(kind string, lowerOnly bool) {
 		var ai boostSuggestion
 		err := claudeJSON(model, boostSystem, f, boostSchema, &ai)
 		if err == nil {
-			err = validBoost(ai.ATOM, f)
+			err = validBoost(ai.ATOM, ai.CapUSD, f)
 		}
 		if err != nil {
 			st.Note = "AI unavailable (" + err.Error() + "); rule-based."
@@ -202,10 +221,12 @@ func (e *Engine) autoBoost(kind string, lowerOnly bool) {
 	}
 	e.prevBoost = e.boostBps
 	e.boostState = st
-	if e.boostBps[ATOM] == s.ATOM*100 {
+	capChanged := e.pool.DailyCap != s.CapUSD*Micro
+	e.pool.DailyCap = s.CapUSD * Micro
+	if e.boostBps[ATOM] == s.ATOM*100 && !capChanged {
 		return
 	}
 	e.boostBps = map[Asset]int64{ATOM: s.ATOM * 100, USDCINJ: 0}
 	e.newTx()
-	e.log("sec", "bonus agent ("+st.Source+")", "RewardPool.SetBoost", fmt.Sprintf("%s: ATOM +%d%% · %s", kind, s.ATOM, s.Reason))
+	e.log("sec", "bonus agent ("+st.Source+")", "RewardPool.SetBoost", fmt.Sprintf("%s: ATOM +%d%% · daily limit $%d per user · %s", kind, s.ATOM, s.CapUSD, s.Reason))
 }

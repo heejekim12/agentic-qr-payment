@@ -144,7 +144,7 @@ Only `ACTIVE` merchants can be paid. `pubkey` verifies the merchant's QR signatu
 
 - Inflows: merchant fees, sponsor and marketing budget.
 - Outflows: POINT discounts paid to merchants, redemptions including boost.
-- Controls: per-user daily redeem cap and pause (operator); the bonus per asset is set by the AI agent (see [Redeem bonus agent](#redeem-bonus-agent)). A pause stops POINT discounts and redemptions only; user Vaults keep working.
+- Controls: operators can only add budget and pause; the ATOM bonus and the per-user daily conversion limit are set by the AI agent (see [Redeem bonus agent](#redeem-bonus-agent)). A pause stops POINT discounts and redemptions only; user Vaults keep working.
 - Bonus rule: every update must keep net value ATOM > USDC.inj after route cost and keep the pool covering all outstanding POINT.
 
 ## Flows
@@ -249,7 +249,7 @@ The owner signs `Vault.Withdraw` to send USDC back to their own address. No limi
 | Earn rate | `point_earn_bps` of the USDC-paid amount, equal to the pool share: 0.20% (small stores), 0.40% and 0.45% (restaurants); happy hour adds 2-3% of the order |
 | Redeem boost | Set by the AI agent daily at 00:00 KST, starting at ATOM +7%; USDC.inj 0% (+1% earn on next payment) |
 | Route cost (sample) | ATOM 0.6%, USDC.inj 0% |
-| Daily redeem cap | $50 per user |
+| Daily conversion limit | Set by the agent, $50-700 per user (about KRW 1,000,000) |
 
 Value of 1,000 POINT ($10.00) with demo settings:
 
@@ -258,7 +258,7 @@ Value of 1,000 POINT ($10.00) with demo settings:
 | ATOM ($1.18) | +$0.70 | -$0.0642 | $10.6358 | 9.0134 ATOM |
 | USDC.inj | $0 | $0 | $10.00 | 10.00 USDC.inj |
 
-The operator view shows pool coverage: `pool balance / (outstanding POINT * 0.01)`.
+The operator view shows pool coverage: `pool balance / (outstanding POINT * 0.01)`. 100% means the pool can pay every unused POINT today; the bonus agent cuts the ATOM bonus when coverage falls below 100% plus the bonus.
 
 ## Fee structure
 
@@ -372,6 +372,7 @@ Inputs: Reward Pool balance, outstanding POINT value, coverage, redeemed value p
 
 Guardrails enforced in code (`internal/engine/boost.go`):
 
+- Daily conversion limit per user $50-700 (about KRW 1,000,000), changed by at most $100 a day, sized to about 10% of the pool across users holding points
 - ATOM 3-10%: the floor keeps ATOM clearly above USDC.inj after route cost; the ceiling caps sponsor cost. The floor yields only when the pool cannot cover it (solvency first)
 - Each update moves a bonus by at most 2 percentage points
 - Net value after route cost: ATOM > USDC.inj
@@ -448,7 +449,7 @@ Wallet connect reads addresses only. Balances stay simulated and no signature is
 | ATOM preference | Bonus set daily by the AI agent within guardrails (start ATOM +7%); USDC.inj 0% with +1% earn on the next payment; the Redeem screen shows each bonus and the net gain over USDC.inj (for example ATOM +7% bonus, +6.4% vs USDC.inj) |
 | Agent | Advice on points to keep or redeem, top-up amount and cheapest chain, and a nearby happy hour; Claude when a key is set, rules otherwise; each suggestion opens a pre-filled screen and the user confirms |
 | Happy hour | Merchant-paid extra POINT during a daily window, shown on the POS, receipt and operator store table |
-| Operator | Reward Pool balance, coverage, inflow and outflow totals, daily redeem cap, budget top-up, pause, read-only view of the AI-set bonus with its reason, merchant approve/suspend |
+| Operator | Reward Pool balance, coverage, inflow and outflow totals, budget top-up and pause only; read-only view of the AI-set bonus and daily limit with its reason, merchant approve/suspend |
 | Wallets | Keplr (`inj1` and `cosmos1`) and MetaMask (`0x` converted to `inj1`), address only |
 | Links | Skip:Go attribution on routed screens; Mintscan link for every simulated contract transaction |
 
@@ -533,7 +534,7 @@ web/               Static UI (embedded into the binary)
 | POST | `/api/refund` | Merchant-signed refund of a payment |
 | POST | `/api/redeem` | Burn POINT and receive ATOM or USDC.inj |
 | POST | `/api/merchants/status` | Toggle merchant ACTIVE/SUSPENDED |
-| POST | `/api/pool/cap`, `/api/pool/fund`, `/api/pool/pause` | Reward Pool settings |
+| POST | `/api/pool/fund`, `/api/pool/pause` | Add budget, pause or resume rewards |
 
 Errors return `{"error":{"code":"ERR_...","message":"..."}}`. History entries and contract events include `tx_hash`. `/api/state` also returns `stats` (platform totals) and per-merchant `orders`, `sales_micro`, `fees_micro`, `point_comp_micro` and `refunds`. Amounts ending in `_micro` are in units of 0.000001 USDC.
 

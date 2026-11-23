@@ -406,22 +406,19 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
         <h2>Rewards pool <small>separate from user balances</small></h2>
         <div class="kv">
           <span>Pool balance</span><span class="n" id="rp-bal"></span>
-          <span>Points outstanding</span><span class="n" id="rp-liab"></span>
-          <span>Coverage</span><span class="n" id="rp-cov"></span>
+          <span title="Value of points users hold but have not used or converted yet">Unused points (owed to users)</span><span class="n" id="rp-liab"></span>
+          <span title="Pool balance ÷ unused points">Coverage</span><span class="n" id="rp-cov"></span>
           <div class="meter"><i id="rp-m"></i></div>
+          <span class="note" style="grid-column:1/-1">Pool balance ÷ unused points. 100% means the pool can pay every unused point today; below that the agent lowers the ATOM bonus.</span>
           <span>In: merchant fees</span><span class="n" id="rp-in"></span>
           <span>Out: discounts and redemptions</span><span class="n" id="rp-out"></span>
           <span>Skip:Go fee revenue (outside the pool)</span><span class="n" id="op-rev"></span>
         </div>
-        <div class="row">
-          <label class="field">Daily redeem cap per user ($)<input id="rp-cap" type="number" min="1" step="1" value="50"></label>
-          <button id="rp-apply" class="sm">Apply</button>
-        </div>
-        <div class="row"><button id="rp-fund" class="sm">Add $200 budget</button><button id="rp-pause" class="sm danger">Pause rewards</button></div>
+                <div class="row"><button id="rp-fund" class="sm">Add $200 budget</button><button id="rp-pause" class="sm danger">Pause rewards</button></div>
         <div class="bonus-ai">
           <div class="adv-h"><span class="t">Redeem bonus</span><span id="bs-src"></span></div>
-          <div class="kv"><span>ATOM</span><span class="n" id="bs-atom"></span><span>USDC.inj</span><span class="n">0%</span></div>
-          <p class="note">Allowed range: ATOM 3–10%. Set by the agent daily.</p>
+          <div class="kv"><span>ATOM</span><span class="n" id="bs-atom"></span><span>USDC.inj</span><span class="n">0%</span><span>Daily limit per user</span><span class="n" id="rp-cap"></span></div>
+          <p class="note">Allowed range: ATOM 3–10%, daily limit $50–700 (about ₩1,000,000) per user. Set by the agent daily.</p>
           <p class="note" id="bs-reason"></p>
         </div>
       </div>
@@ -925,6 +922,7 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
     $("bs-atom").textContent = "+" + (S.boost_bps.ATOM / 100) + "%";
     $("bs-src").innerHTML = bo.source === "ai" ? `<span class="pill acc">Set by AI · ${esc(bo.model)}</span>` : `<span class="pill mute" title="${esc(bo.note || "")}">Set by rules</span>`;
     $("bs-reason").textContent = bo.reason ? `${bo.kind === "emergency" ? "Emergency cut. " : ""}${bo.reason} Set ${hhmm(bo.updated)}; next daily update ${hhmm(bo.next_update)} KST.` : "Waiting for the first update.";
+    $("rp-cap").textContent = "$" + fmtU(p.daily_cap_micro);
     $("op-rev").textContent = "$" + fmtU(st.operator_fees_micro);
 
     const stores = [...S.merchants].sort((a, b) => b.sales_micro - a.sales_micro);
@@ -939,7 +937,6 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
 
     $("log").innerHTML = S.events.filter(ev => ev.tx_hash).map(ev => `<div class="ev ev-${esc(ev.kind)}"><div class="h"><span>${esc(ev.msg)}</span><span class="m">${esc(ev.signer)}</span><span class="t">${hhmm(ev.time)}</span></div><div class="b">${esc(ev.body)}</div>${txLink(ev.tx_hash, "Tx " + ev.tx_hash.slice(0, 8) + "…")}</div>`).join("");
   }
-  $("rp-apply").onclick = async () => { await api("POST", "/api/pool/cap", { cap_usdc: Number($("rp-cap").value) }).catch(() => {}); await refresh(); };
   $("rp-fund").onclick = async () => { await api("POST", "/api/pool/fund", {}); await refresh(); };
   $("rp-pause").onclick = async () => { await api("POST", "/api/pool/pause", {}); await refresh(); };
 

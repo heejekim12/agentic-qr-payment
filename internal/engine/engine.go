@@ -53,7 +53,7 @@ func New() *Engine {
 			{ID: "MRC_REST_014", Name: "Euljiro Noodle House", Category: "RESTAURANT", Status: StatusActive, SettlementAddr: "inj1ghi...rst", FeeBps: 60, PoolBps: 40, PointEarnBps: 40, Tier: "SME 0.3-0.5B"},
 			{ID: "MRC_REST_031", Name: "Mangwon Bistro", Category: "RESTAURANT", Status: StatusSuspended, SettlementAddr: "inj1jkl...opq", FeeBps: 70, PoolBps: 45, PointEarnBps: 45, Tier: "SME 0.5-1B"},
 		},
-		pool:         Pool{Balance: 300 * Micro, DailyCap: 50 * Micro, GasINJ: 25},
+		pool:         Pool{Balance: 300 * Micro, DailyCap: 700 * Micro, GasINJ: 25},
 		boostBps:     map[Asset]int64{ATOM: 700, USDCINJ: 0},
 		merchantKeys: map[string]ed25519.PrivateKey{},
 		paid:         map[string]bool{},

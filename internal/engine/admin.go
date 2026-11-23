@@ -22,23 +22,6 @@ func (e *Engine) ToggleMerchant(req MerchantStatusRequest) error {
 	return nil
 }
 
-type PoolCapRequest struct {
-	Cap float64 `json:"cap_usdc"`
-}
-
-func (e *Engine) SetPoolCap(req PoolCapRequest) error {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	c, err := toMicro(req.Cap)
-	if err != nil {
-		return err
-	}
-	e.pool.DailyCap = c
-	e.newTx()
-	e.log("sec", "pool admin (multisig)", "RewardPool.SetCap", "per-user daily redeem cap $"+FormatUSDC(c))
-	return nil
-}
-
 const poolFundStep = 200 * Micro
 
 func (e *Engine) FundPool() error {

@@ -44,7 +44,6 @@ func Register(mux *http.ServeMux, e *engine.Engine) {
 	mux.Handle("POST /api/refund", handle(noResult(e.Refund)))
 	mux.Handle("POST /api/redeem", handle(e.Redeem))
 	mux.Handle("POST /api/merchants/status", handle(noResult(e.ToggleMerchant)))
-	mux.Handle("POST /api/pool/cap", handle(noResult(e.SetPoolCap)))
 	mux.Handle("POST /api/pool/fund", handle(noResult(func(struct{}) error { return e.FundPool() })))
 	mux.Handle("POST /api/pool/pause", handle(noResult(func(struct{}) error { return e.TogglePause() })))
 }
