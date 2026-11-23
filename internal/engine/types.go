@@ -15,24 +15,18 @@ const (
 	maxAmount    int64 = 100_000 * Micro
 )
 
-// PayCurrency is the only currency the Vault accepts for QR payments.
+// PayCurrency is the currency of the QR price and of merchant settlement.
 const PayCurrency = "USDC.inj"
 
-type Asset string
-
+// Assets a user can pay with. ATOM is swapped to USDC.inj by Skip:Go inside the payment.
 const (
-	ATOM    Asset = "ATOM"
-	USDCINJ Asset = "USDC_INJ"
+	PayUSDC = "USDC_INJ"
+	PayATOM = "ATOM"
 )
 
-var Assets = []Asset{ATOM, USDCINJ}
-
-var assetLabel = map[Asset]string{ATOM: "ATOM", USDCINJ: "USDC.inj"}
-
-// Sample USD prices (fallback until CoinGecko answers) and swap/IBC route cost.
-var (
-	price       = map[Asset]float64{ATOM: 1.18, USDCINJ: 1}
-	routeFeeBps = map[Asset]int64{ATOM: 60, USDCINJ: 0}
+const (
+	atomSwapFeeBps = 30  // sample Skip:Go ATOM -> USDC.inj swap cost on injective-1
+	maxSlippageBps = 100 // the payment reverts if ATOM needed rises more than 1% over the preview
 )
 
 type chainRoute struct {
@@ -42,8 +36,10 @@ type chainRoute struct {
 }
 
 // injective-1 already holds USDC.inj, so a deposit from it needs no route.
+// cosmoshub-4 ATOM is moved over IBC by Skip:Go and kept as ATOM in the Vault.
 var topupChains = map[string]chainRoute{
 	"injective-1": {"Injective", "USDC.inj", 0},
+	"cosmoshub-4": {"Cosmos Hub", "ATOM", 10},
 	"8453":        {"Base", "USDC", 10},
 	"1":           {"Ethereum", "USDC", 40},
 	"solana":      {"Solana", "USDC", 20},
@@ -55,24 +51,23 @@ const (
 )
 
 type Merchant struct {
-	ID             string `json:"merchant_id"`
-	Name           string `json:"name"`
-	Category       string `json:"category"`
-	Status         string `json:"status"`
-	SettlementAddr string `json:"settlement_addr"`
-	FeeBps         int64  `json:"fee_bps"`
-	PoolBps        int64  `json:"pool_bps"` // part of FeeBps that goes to the Reward Pool; the rest is Skip:Go revenue
-	Tier           string `json:"tier"`
-	PointEarnBps   int64  `json:"point_earn_bps"`
-	Received       int64  `json:"received_micro"`
-	PubKey         string `json:"pubkey"` // ed25519 public key that verifies this merchant's QR
-	Area           string `json:"area"`
-	Promo          *Promo `json:"promo,omitempty"` // merchant-approved happy hour, paid by the merchant
-	Orders         int    `json:"orders"`
-	Sales          int64  `json:"sales_micro"`
-	Fees           int64  `json:"fees_micro"`
-	PointComp      int64  `json:"point_comp_micro"` // POINT discounts paid to the merchant by the Reward Pool
-	Refunds        int    `json:"refunds"`
+	ID              string `json:"merchant_id"`
+	Name            string `json:"name"`
+	Category        string `json:"category"`
+	Status          string `json:"status"`
+	SettlementAddr  string `json:"settlement_addr"`
+	SubscriptionKRW int64  `json:"subscription_krw"` // monthly software fee billed in KRW off-chain; payments carry no fee
+	Tier            string `json:"tier"`
+	PointEarnBps    int64  `json:"point_earn_bps"`
+	AtomBonusBps    int64  `json:"atom_bonus_bps"` // extra store POINT when paying with ATOM, funded by the merchant
+	Received        int64  `json:"received_micro"`
+	PubKey          string `json:"pubkey"` // ed25519 public key that verifies this merchant's QR
+	Area            string `json:"area"`
+	Promo           *Promo `json:"promo,omitempty"` // merchant-approved happy hour, paid by the merchant
+	Orders          int    `json:"orders"`
+	Sales           int64  `json:"sales_micro"`
+	Discounts       int64  `json:"discount_micro"` // POINT discounts this merchant gave on its own points
+	Refunds         int    `json:"refunds"`
 }
 
 // Promo is a daily happy-hour window in KST minutes since midnight.
@@ -90,26 +85,17 @@ type Profile struct {
 
 // Stats are platform-wide totals for the overview screen; payment figures are gross of refunds.
 type Stats struct {
-	Payments      int                  `json:"payments"`
-	GMV           int64                `json:"gmv_micro"`
-	PaidUSDC      int64                `json:"paid_usdc_micro"`
-	PointDiscount int64                `json:"point_discount_micro"`
-	Refunds       int                  `json:"refunds"`
-	Refunded      int64                `json:"refunded_micro"`
-	OperatorFees  int64                `json:"operator_fees_micro"`
-	TopUps        int                  `json:"topups"`
-	TopUpVolume   int64                `json:"topup_micro"`
-	PointsMinted  int64                `json:"points_minted"`
-	PointsBurned  int64                `json:"points_burned"`
-	Rejected      map[string]int       `json:"rejected"`
-	Redeemed      map[Asset]*AssetStat `json:"redeemed"`
-}
-
-type AssetStat struct {
-	Count  int     `json:"count"`
-	Points int64   `json:"points"`
-	Value  int64   `json:"value_micro"`
-	Amount float64 `json:"amount"`
+	Payments      int            `json:"payments"`
+	GMV           int64          `json:"gmv_micro"`
+	PaidUSDC      int64          `json:"paid_usdc_micro"`
+	PointDiscount int64          `json:"point_discount_micro"`
+	Refunds       int            `json:"refunds"`
+	Refunded      int64          `json:"refunded_micro"`
+	TopUps        int            `json:"topups"`
+	TopUpVolume   int64          `json:"topup_micro"`
+	PointsMinted  int64          `json:"points_minted"`
+	PointsBurned  int64          `json:"points_burned"`
+	Rejected      map[string]int `json:"rejected"`
 }
 
 type Session struct {
@@ -117,11 +103,6 @@ type Session struct {
 	PerTx      int64 `json:"per_tx_micro"`
 	Daily      int64 `json:"daily_micro"`
 	SpentToday int64 `json:"spent_today_micro"`
-}
-
-// Policy only tunes the agent's advice; it never authorizes the agent to act.
-type Policy struct {
-	Threshold int64 `json:"threshold"` // POINT balance at which the agent suggests redeeming
 }
 
 type HistoryEntry struct {
@@ -141,40 +122,23 @@ type HistoryEntry struct {
 	Amount       int64  `json:"order_micro,omitempty"`
 	PointsUsed   int64  `json:"-"`
 	PaidUSDC     int64  `json:"-"`
-	Fee          int64  `json:"-"`
 	PointsEarned int64  `json:"-"`
-	PoolFee      int64  `json:"-"`
 }
 
 type User struct {
-	Name             string           `json:"name"`
-	Addr             string           `json:"addr"`
-	CosmosAddr       string           `json:"cosmos_addr"`
-	USDC             int64            `json:"usdc_micro"`
-	Points           int64            `json:"points"`
-	ATOM             float64          `json:"atom"`
-	Session          Session          `json:"session"`
-	Policy           Policy           `json:"policy"`
-	RedeemedToday    int64            `json:"redeemed_today_micro"`
-	NextEarnBonusBps int64            `json:"next_earn_bonus_bps"`
-	History          []*HistoryEntry  `json:"history"`
-	Wallet           string           `json:"wallet,omitempty"`
-	Area             string           `json:"area"`
-	Profile          Profile          `json:"profile"`
-	Holdings         map[string]int64 `json:"holdings_micro"` // sample USDC held per source chain
-	day              string
-	demoAddr         string
-	demoCosmos       string
-}
-
-type Pool struct {
-	Balance     int64   `json:"balance_micro"`
-	FeesIn      int64   `json:"fees_in_micro"`
-	DiscountOut int64   `json:"discount_out_micro"`
-	RedeemOut   int64   `json:"redeem_out_micro"`
-	Paused      bool    `json:"paused"`
-	DailyCap    int64   `json:"daily_cap_micro"`
-	GasINJ      float64 `json:"gas_inj"`
+	Name     string           `json:"name"`
+	Addr     string           `json:"addr"`
+	USDC     int64            `json:"usdc_micro"`
+	ATOM     int64            `json:"atom_micro"` // uatom held in the Vault
+	Points   map[string]int64 `json:"points"`     // per merchant ID; usable only at that merchant
+	Session  Session          `json:"session"`
+	History  []*HistoryEntry  `json:"history"`
+	Wallet   string           `json:"wallet,omitempty"`
+	Area     string           `json:"area"`
+	Profile  Profile          `json:"profile"`
+	Holdings map[string]int64 `json:"holdings_micro"` // sample USDC held per source chain
+	day      string
+	demoAddr string
 }
 
 type Event struct {
@@ -208,19 +172,6 @@ type QRVerification struct {
 	Checks []QRCheck `json:"checks"`
 }
 
-type RedeemQuote struct {
-	Asset    Asset   `json:"asset"`
-	Label    string  `json:"label"`
-	Points   int64   `json:"points"`
-	BoostBps int64   `json:"boost_bps"`
-	Value    int64   `json:"value_micro"`
-	Boost    int64   `json:"boost_micro"`
-	Gross    int64   `json:"gross_micro"`
-	Net      int64   `json:"net_micro"`
-	Amount   float64 `json:"amount"`
-	Best     bool    `json:"best"`
-}
-
 type TopupQuote struct {
 	Chain  string `json:"chain"`
 	Name   string `json:"name"`
@@ -228,6 +179,9 @@ type TopupQuote struct {
 	Amount int64  `json:"amount_micro"`
 	Fee    int64  `json:"fee_micro"`
 	Out    int64  `json:"out_micro"`
+	// ATOM top-ups arrive as ATOM; AtomOut is Out at AtomUSD.
+	AtomOut int64   `json:"atom_out_micro,omitempty"`
+	AtomUSD float64 `json:"atom_usd,omitempty"`
 }
 
 type Receipt struct {
@@ -240,8 +194,13 @@ type Receipt struct {
 	PointsEarned  int64  `json:"points_earned"`
 	EarnBps       int64  `json:"earn_bps"`
 	PromoBps      int64  `json:"promo_bps"`
-	BonusApplied  bool   `json:"bonus_applied"`
+	AtomBonusBps  int64  `json:"atom_bonus_bps"`
 	SignedBy      string `json:"signed_by"`
+	// Set when paying with ATOM.
+	PayWith string  `json:"pay_with"`
+	AtomIn  int64   `json:"atom_in_micro,omitempty"`
+	AtomMax int64   `json:"atom_max_micro,omitempty"` // preview only: ATOM in plus slippage limit
+	AtomUSD float64 `json:"atom_usd,omitempty"`
 }
 
 type PayResult struct {
@@ -269,6 +228,11 @@ func FormatUSDC(m int64) string {
 	return fmt.Sprintf("%s%d.%02d", sign, m/Micro, (m%Micro)/10_000)
 }
 
+// FormatAtom renders uatom as a 2-decimal ATOM string (truncated).
+func FormatAtom(m int64) string {
+	return fmt.Sprintf("%d.%02d", m/Micro, (m%Micro)/10_000)
+}
+
 func toMicro(v float64) (int64, error) {
 	if !(v > 0) {
 		return 0, errf("ERR_BAD_AMOUNT", "amount must be above 0")
@@ -278,9 +242,4 @@ func toMicro(v float64) (int64, error) {
 		return 0, errf("ERR_BAD_AMOUNT", "amount exceeds %s", FormatUSDC(maxAmount))
 	}
 	return m, nil
-}
-
-func validAsset(a Asset) bool {
-	_, ok := assetLabel[a]
-	return ok
 }

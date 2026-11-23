@@ -102,15 +102,19 @@ header.top .sub { color: var(--muted); margin: 2px 0 0; }
 .balance .big .unit { font-size: 16px; font-weight: 500; color: var(--muted); letter-spacing: 0; margin-left: 6px; }
 .bal-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; background: var(--pt-soft); border-radius: 12px; padding: 10px 12px; }
 .bal-row b { color: var(--pt); }
+.pt-stores { padding: 0 12px; }
+.pt-stores .n { color: var(--pt); }
 .wallets { display: flex; flex-direction: column; gap: 8px; }
-.wgrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
-.wcell { background: var(--panel-2); border-radius: 10px; padding: 8px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.wcell b { font-family: var(--f-mono); font-size: 13px; font-variant-numeric: tabular-nums; }
-.wcell.zero b { color: var(--muted); font-weight: 400; }
-button.wcell { border: 1px solid transparent; text-align: left; font-weight: 400; cursor: pointer; }
-button.wcell:hover { border-color: var(--accent); filter: none; }
-.wcell .u { font-size: 11px; color: var(--muted); }
-.wcell.wide { grid-column: 1 / -1; flex-direction: row; justify-content: space-between; align-items: baseline; }
+.wlist { display: flex; flex-direction: column; gap: 4px; }
+.wrow { display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: var(--panel-2); border: 1px solid transparent; border-radius: 10px; text-align: left; font-weight: 400; cursor: pointer; }
+.wrow:hover { border-color: var(--accent); filter: none; }
+.wrow .a, .wrow .v { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.wrow .a { flex: 1; }
+.wrow .v { text-align: right; }
+.wrow .v b { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.bal-assets { font-size: 14px; gap: 4px 12px; }
+.bal-assets .n { color: var(--fg); }
+.bal-assets .n small { color: var(--muted); font-size: 12px; margin-left: 6px; }
 .pay-big { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 16px; font-size: 17px; border-radius: 16px; }
 .pay-big svg, .act svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
@@ -131,12 +135,11 @@ button.wcell:hover { border-color: var(--accent); filter: none; }
 .agent { border: 1px solid var(--accent); background: var(--accent-soft); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
 .agent .hd { font-size: 12px; font-weight: 600; color: var(--accent); }
 .agent p { margin: 0; }
-.bonus-ai { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--line); padding-top: 12px; }
-.bonus-ai .t { font-weight: 600; }
-.adv { display: flex; flex-direction: column; gap: 2px; padding-top: 10px; border-top: 1px solid rgba(143,155,255,.25); }
+.adv { display: flex; align-items: center; gap: 8px; padding-top: 10px; border-top: 1px solid rgba(143,155,255,.25); cursor: help; }
 .adv-h { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-.adv .t { font-weight: 600; font-size: 13.5px; }
-.adv .why { font-style: italic; }
+.adv .tag { flex: none; font-size: 11px; font-weight: 600; color: var(--accent); border: 1px solid var(--accent); border-radius: 999px; padding: 1px 8px; }
+.adv .t { flex: 1; min-width: 0; font-weight: 600; font-size: 13.5px; }
+.adv button { flex: none; }
 
 .merchant-head { display: flex; flex-direction: column; align-items: center; gap: 6px; padding-top: 4px; }
 .mname { font-family: var(--f-display); font-size: 17px; font-weight: 600; }
@@ -260,12 +263,10 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
   <header class="top">
     <div>
       <h1>Agentic QR Payment</h1>
-      <p class="sub">Pay approved cafes and restaurants from your own balance, earn points, and turn them into ATOM.</p>
+      <p class="sub">Pay approved cafes and restaurants from your own balance, top up with USDC or ATOM, and earn points each store gives back as a discount.</p>
     </div>
     <div class="hdr-r"><span class="nc">NON-CUSTODIAL</span><span class="sim">SIMULATION · NO ON-CHAIN TX</span></div>
   </header>
-
-  <div id="paused" class="banner" hidden>Rewards are paused. Payments without points and withdrawals still work.</div>
 
   <div class="stage">
     <!-- CUSTOMER -->
@@ -278,7 +279,7 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
             <button id="w-open" class="sm primary">Connect wallet</button>
             <button id="w-chip" class="chip" hidden><span id="w-chip-label"></span></button>
             <div id="w-menu" class="menu" hidden>
-              <button id="w-keplr">Keplr<small>Injective and Cosmos Hub</small></button>
+              <button id="w-keplr">Keplr<small>Injective</small></button>
               <button id="w-mm">MetaMask<small>EVM address on Injective</small></button>
               <button id="w-off" hidden>Disconnect<small>Use the demo address</small></button>
             </div>
@@ -290,22 +291,22 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
           <div class="balance">
             <div>
               <div class="lbl">Vault balance · <span class="nc-in">non-custodial</span></div>
-              <div class="big" id="bal-usdc">0.00</div>
-              <div class="note">1 USDC.inj = $1 · only you can withdraw</div>
+              <div class="big" id="bal-total">$0.00</div>
+              <div class="kv bal-assets" id="bal-assets"></div>
+              <div class="note" id="bal-price"></div>
             </div>
             <div class="bal-row">
               <span><b id="bal-pt">0 points</b> <span class="note" id="bal-pt-usd"></span></span>
-              <button class="sm" data-go="redeem">Redeem</button>
             </div>
+            <div class="kv pt-stores" id="bal-pt-stores" aria-label="Points by store"></div>
           </div>
           <div class="wallets">
-            <div class="section-t"><span>Your wallets</span><span class="note">outside the app · tap to top up as USDC.inj</span></div>
-            <div class="wgrid" id="bal-wallet"></div>
+            <div class="section-t"><span>Your wallets <span class="note" id="wal-total"></span></span><span class="note">outside the app · tap to top up</span></div>
+            <div class="wlist" id="bal-wallet"></div>
           </div>
           <button class="primary pay-big" data-go="scan"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4v-3"/></svg>Pay</button>
           <div class="actions">
             <button class="act" data-go="topup"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Top up</button>
-            <button class="act" data-go="redeem"><svg viewBox="0 0 24 24"><path d="M7 7h11l-3-3M17 17H6l3 3"/></svg>Redeem</button>
             <button class="act" data-go="withdraw"><svg viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></svg>Withdraw</button>
           </div>
           <div id="home-agent"></div>
@@ -341,21 +342,10 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
           <button id="tu-go" class="primary block">Top up</button>
         </div>
 
-        <!-- REDEEM -->
-        <div class="screen" id="v-redeem" hidden>
-          <div class="scr-head"><button class="back" data-go="home" aria-label="Back">&larr;</button><h2>Redeem points</h2><a class="skip" href="https://go.skip.build/" target="_blank" rel="noopener">by <span class="sg">skip<b>:</b>go</span></a></div>
-          <label class="field"><span>Points · <span id="rd-avail"></span></span>
-            <div class="row"><input id="rd-pt" class="amount-input" type="number" min="1" step="1" inputmode="numeric" style="flex:1 1 140px"><button id="rd-max" class="sm">Max</button></div>
-          </label>
-          <div class="opts" id="rd-opts"></div>
-          <button id="rd-go" class="primary block">Redeem</button>
-          <p class="note center">Paid from the rewards pool, not from your balance. Values show the reward at redemption, not investment advice; the ATOM price can change after you receive it.</p>
-          <p class="note center" id="rd-price"></p>
-        </div>
-
         <!-- WITHDRAW -->
         <div class="screen" id="v-withdraw" hidden>
           <div class="scr-head"><button class="back" data-go="home" aria-label="Back">&larr;</button><h2>Withdraw</h2></div>
+          <label class="field">Asset<select id="wd-asset"><option value="USDC_INJ">USDC.inj</option><option value="ATOM">ATOM</option></select></label>
           <label class="field"><span>Amount · <span id="wd-avail"></span></span>
             <div class="row"><input id="wd-amt" class="amount-input" type="number" min="0.01" step="0.01" inputmode="decimal" style="flex:1 1 140px"><button id="wd-max" class="sm">Max</button></div>
           </label>
@@ -375,8 +365,6 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
             <label class="field">Max per payment ($)<input id="st-ptx" type="number" min="1" step="1"></label>
             <label class="field">Max per day ($)<input id="st-day" type="number" min="1" step="1"></label>
           </div>
-          <label class="field">Suggest redeeming at (points)<input id="st-min" type="number" min="1" step="1"></label>
-          <p class="note">Suggestions only. Points are redeemed only when you choose to.</p>
           <p class="err" id="st-err" hidden></p>
           <button id="st-save" class="primary block">Save</button>
         </div>
@@ -417,35 +405,9 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
 
     <!-- OPERATOR -->
     <div class="col col-op">
-      <div class="col-h"><span>Operator</span><span>runs the rewards pool</span></div>
+      <div class="col-h"><span>Operator</span><span>runs the store registry</span></div>
       <div class="card">
         <div class="kpis" id="op-kpis"></div>
-      </div>
-
-      <div class="card">
-        <h2>Points redeemed <small id="op-atom-share"></small></h2>
-        <div class="bars" id="op-bars"></div>
-      </div>
-
-      <div class="card">
-        <h2>Rewards pool <small>separate from user balances</small></h2>
-        <div class="kv">
-          <span>Pool balance</span><span class="n" id="rp-bal"></span>
-          <span title="Value of points users hold but have not used or converted yet">Unused points (owed to users)</span><span class="n" id="rp-liab"></span>
-          <span title="Pool balance ÷ unused points">Coverage</span><span class="n" id="rp-cov"></span>
-          <div class="meter"><i id="rp-m"></i></div>
-          <span class="note" style="grid-column:1/-1">Pool balance ÷ unused points. 100% means the pool can pay every unused point today; below that the agent lowers the ATOM bonus.</span>
-          <span>In: merchant fees</span><span class="n" id="rp-in"></span>
-          <span>Out: discounts and redemptions</span><span class="n" id="rp-out"></span>
-          <span>Skip:Go fee revenue (outside the pool)</span><span class="n" id="op-rev"></span>
-        </div>
-                <div class="row"><button id="rp-fund" class="sm">Add $200 budget</button><button id="rp-pause" class="sm danger">Pause rewards</button></div>
-        <div class="bonus-ai">
-          <div class="adv-h"><span class="t">Redeem bonus</span><span id="bs-src"></span></div>
-          <div class="kv"><span>ATOM</span><span class="n" id="bs-atom"></span><span>USDC.inj</span><span class="n">0%</span><span>Daily limit per user</span><span class="n" id="rp-cap"></span></div>
-          <p class="note">Allowed range: ATOM 3–10%, daily limit $50–700 (about ₩1,000,000) per user. Set by the agent daily.</p>
-          <p class="note" id="bs-reason"></p>
-        </div>
       </div>
 
       <div class="card">
@@ -488,33 +450,35 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
     ERR_UNKNOWN_QR: "No payment QR found. Ask the store to show one.",
     ERR_BAD_SIGNATURE: "This QR code was altered or not issued by the store. Nothing was charged.",
     ERR_BAD_QR: "This QR code is not valid. Ask the store for a new one.",
-    ERR_INSUFFICIENT_WALLET: "Not enough USDC in that wallet. Pick another chain or a smaller amount.",
+    ERR_INSUFFICIENT_WALLET: "Not enough in that wallet. Pick another source or a smaller amount.",
     ERR_BAD_CURRENCY: "This QR asks for a currency other than USDC.inj. Nothing was charged.",
     ERR_SESSION_TX_LIMIT: "Over your tap-to-pay limit per payment. Raise it in Settings.",
     ERR_SESSION_DAILY_LIMIT: "You reached today's tap-to-pay limit. Raise it in Settings.",
     ERR_INSUFFICIENT_VAULT: "Not enough balance. Top up first.",
-    ERR_POOL_INSUFFICIENT: "Rewards are unavailable right now. Pay without points.",
-    ERR_POOL_PAUSED: "Rewards are paused right now. Your balance is safe.",
-    ERR_DAILY_REDEEM_CAP: "You reached today's redeem limit. Try fewer points.",
-    ERR_INSUFFICIENT_POINT: "You don't have that many points.",
     ERR_BAD_AMOUNT: "Enter an amount above 0.",
-    ERR_ATOM_NOT_FAVORED: "ATOM must stay the best value. Raise the ATOM bonus.",
+    ERR_SLIPPAGE: "The ATOM price moved more than 1%. Review the new amount and pay again.",
+    ERR_BAD_ASSET: "Choose USDC.inj or ATOM.",
     ERR_REFUND_WINDOW_CLOSED: "This payment can no longer be refunded.",
     ERR_BAD_POLICY: "Check the values and try again.",
   };
   let S = null, cur = 0, qr = null, posPaid = false, timerId = null;
-  let usePts = true, payDone = null, advice = {}, redeemTarget = "ATOM", tuTimer = null;
+  let usePts = true, payWith = "USDC_INJ", lastPv = null, payDone = null, advice = {}, tuTimer = null;
 
   const $ = id => document.getElementById(id);
   const U = () => S.users[cur];
   const fmtU = m => (m / MICRO).toFixed(2);
   const fmtP = p => Number(p).toLocaleString("en-US");
+  const fmtA = m => (Math.floor(m / 10_000) / 100).toFixed(2); // truncated so Max never exceeds the balance
+  const atomPx = () => (S.atom_price || {}).usd || 0;
+  // Sample wallet holdings are kept as USD value; ATOM is shown as a quantity at the current price.
+  const walletAmt = (src, usdMicro) => src.sym === "ATOM" ? fmtA(atomPx() ? usdMicro / atomPx() : 0) : fmtU(usdMicro);
+  const priceNote = () => { const p = S.atom_price || {}; return p.usd ? `ATOM $${p.usd.toFixed(2)} · ${p.source === "coingecko" ? "CoinGecko " + hhmm(p.updated) : "sample price"}` : ""; };
   const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const hhmm = t => new Date(t).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
   const short = a => a && a.length > 18 ? a.slice(0, 10) + "…" + a.slice(-6) : a;
   const friendly = e => (e && FRIENDLY[e.code]) || (e instanceof TypeError ? "Can't reach the demo server. Start it with go run ./cmd/server and reload." : (e && e.message) || String(e));
   const showErr = (id, e) => { const el = $(id); el.textContent = e ? friendly(e) : ""; el.hidden = !e; };
-  const amt = (asset, v) => v.toFixed(asset === "USDC_INJ" ? 2 : 4);
+  const ptsTotal = u => Object.values(u.points || {}).reduce((s, n) => s + n, 0);
   const txLink = (h, label = "View transaction") => /^[0-9A-F]{64}$/.test(h || "") ? `<a class="tx" href="${MINTSCAN}${h}" target="_blank" rel="noopener">${label} ↗</a>` : "";
   const hm = n => String(Math.floor(n / 60)).padStart(2, "0") + ":" + String(n % 60).padStart(2, "0");
   const promoText = p => `${hm(p.start_min)}–${hm(p.end_min)} +${p.extra_bps / 100}%`;
@@ -545,15 +509,12 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
       if (!(h[tuChain] > 0)) { const best = SOURCES.reduce((a, b) => ((h[b.id] || 0) > (h[a.id] || 0) ? b : a)); tuChain = best.id; renderAssetPick(); }
       quoteTopup();
     }
-    if (v === "redeem") { $("rd-pt").value = Math.max(U().points, 0) || ""; renderRedeem(); }
     if (v === "withdraw") renderWithdraw();
     if (v === "settings") loadSettings();
   }
   document.addEventListener("click", e => {
     const g = e.target.closest("[data-go]");
     if (g) { if (g.dataset.go === "home") payDone = null; go(g.dataset.go); }
-    const ar = e.target.closest("[data-adv-redeem]");
-    if (ar) { const [pts, t] = ar.dataset.advRedeem.split(":"); reviewRedeem(Number(pts), t); }
     const at = e.target.closest("[data-adv-topup]");
     if (at) { const [m, c] = at.dataset.advTopup.split(":"); openTopup(Number(m), c); }
     if (e.target.closest("[data-ask-agent]")) askAgent();
@@ -568,18 +529,32 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
     const u = U();
     $("user-sel").innerHTML = S.users.map((x, i) => `<option value="${i}" ${i === cur ? "selected" : ""}>${esc(x.name)}</option>`).join("");
     renderWallet();
-    $("bal-usdc").innerHTML = `${fmtU(u.usdc_micro)}<span class="unit">USDC.inj</span>`;
-    $("bal-wallet").innerHTML = SOURCES.map(x => { const v = (u.holdings_micro || {})[x.id] || 0; const inner = `<span class="note">${esc(x.on.split(" ")[0])}</span><b>${fmtU(v)}</b><span class="u">${esc(x.sym)}</span>`; return v ? `<button class="wcell" data-wallet-topup="${esc(x.id)}" aria-label="Top up from ${esc(x.on)}">${inner}</button>` : `<div class="wcell zero">${inner}</div>`; }).join("")
-      + `<div class="wcell wide ${u.atom > 0 ? "" : "zero"}"><span class="note">Cosmos Hub · rewards</span><b>${u.atom.toFixed(4)} ATOM</b></div>`;
-    $("bal-pt").textContent = fmtP(u.points) + " points";
-    $("bal-pt-usd").textContent = "≈ $" + (u.points / 100).toFixed(2);
+    const atomUsd = u.atom_micro * atomPx() / MICRO;
+    $("wal-total").textContent = `· $${fmtU(Object.values(u.holdings_micro || {}).reduce((a, b) => a + b, 0))}`;
+    $("bal-total").innerHTML = `$${(u.usdc_micro / MICRO + atomUsd).toFixed(2)}<span class="unit">total</span>`;
+    $("bal-assets").innerHTML =
+      `<span>USDC.inj</span><span class="n">${fmtU(u.usdc_micro)}<small>$${fmtU(u.usdc_micro)}</small></span>` +
+      `<span>ATOM</span><span class="n">${fmtA(u.atom_micro)}<small>≈ $${atomUsd.toFixed(2)}</small></span>`;
+    $("bal-price").textContent = `${priceNote()} · only you can withdraw`;
+    // Asset list: largest USD value first; empty wallets are folded into one line.
+    const held = (u.holdings_micro || {});
+    const full = SOURCES.filter(x => held[x.id] > 0).sort((a, b) => held[b.id] - held[a.id]);
+    const empty = SOURCES.filter(x => !(held[x.id] > 0));
+    $("bal-wallet").innerHTML = full.map(x => `<button class="wrow" data-wallet-topup="${esc(x.id)}" aria-label="Top up from ${esc(x.on)}">${x.sym === "ATOM" ? ATOM_ICON : USDC_ICON}<span class="a"><b>${esc(x.sym)}</b><span class="note">${esc(x.on)}</span></span><span class="v"><b>${walletAmt(x, held[x.id])} ${esc(x.sym)}</b><span class="note">$${fmtU(held[x.id])}</span></span></button>`).join("")
+      + (empty.length ? `<p class="note">Empty: ${empty.map(x => esc(x.sym + " on " + x.on.split(" ")[0])).join(", ")}</p>` : "");
+    const stores = Object.values(u.points || {}).filter(n => n > 0).length;
+    $("bal-pt").textContent = fmtP(ptsTotal(u)) + " points";
+    $("bal-pt-usd").textContent = `≈ $${(ptsTotal(u) / 100).toFixed(2)} off · ${plural(stores, "store")}`;
+    const byStore = S.merchants.filter(m => (u.points || {})[m.merchant_id] > 0);
+    $("bal-pt-stores").innerHTML = byStore.length
+      ? byStore.map(m => { const n = u.points[m.merchant_id]; return `<span title="Usable only at ${esc(m.name)}">${esc(m.name)}</span><span class="n">${fmtP(n)} P · $${(n / 100).toFixed(2)}</span>`; }).join("")
+      : `<span class="note" style="grid-column:1/-1">No points yet. Each store's points are usable only at that store.</span>`;
     $("home-agent").innerHTML = adviceHTML();
     renderActivity();
     renderAssetPick();
     renderPos();
     renderMerchant();
     renderOperator();
-    $("paused").hidden = !S.pool.paused;
   }
 
   function renderWallet() {
@@ -595,7 +570,7 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
     const h = U().history;
     if (!h.length) { $("activity").innerHTML = `<div class="empty"><p class="note">Nothing yet. Top up or pay at a store.</p></div>`; return; }
     $("activity").innerHTML = h.slice(0, 4).map(e => {
-      const label = { PAY: "Paid", TOPUP: "Top up", REDEEM: "Redeemed", WITHDRAW: "Withdrawal", REFUND: "Refund" }[e.type] || e.type;
+      const label = { PAY: "Paid", TOPUP: "Top up", WITHDRAW: "Withdrawal", REFUND: "Refund" }[e.type] || e.type;
       const status = e.status === "CANCELLED" ? `<span class="pill bad">Refunded</span>` : "";
       return `<div class="it"><span class="d">${esc(label)} · ${esc(e.desc)}</span><span class="amt ${e.credit ? "plus" : ""}">${esc(e.delta)}</span><span class="sub2"><span>${hhmm(e.time)}</span><span class="acts">${status}${txLink(e.tx_hash)}</span></span></div>`;
     }).join("");
@@ -607,11 +582,12 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
     if (!a) return `<div class="agent"><span class="hd">Agent</span><p>Get advice on your points, balance and happy hours nearby.</p><div class="row"><button class="primary" data-ask-agent>Ask agent</button></div></div>`;
     if (a.loading) return `<div class="agent"><span class="hd">Agent</span><p>Thinking…</p></div>`;
     const src = a.source === "ai" ? `<span class="pill acc">AI · ${esc(a.model)}</span>` : `<span class="pill mute" title="${esc(a.note || "")}">Rule-based</span>`;
-    const items = a.items.map(it => {
-      const btn = it.action === "redeem" ? `<button class="sm" data-adv-redeem="${it.points}:${esc(it.target)}">Review</button>`
-        : it.action === "topup" ? `<button class="sm" data-adv-topup="${it.amount_micro}:${esc(it.chain)}">Review</button>` : "";
-      return `<div class="adv"><div class="adv-h"><span class="t">${esc(it.title)}</span>${btn}</div><span class="note">${esc(it.detail)}</span><span class="note why">${esc(it.reason)}</span></div>`;
-    }).join("");
+    // One line per suggestion; detail and reason are in the tooltip. A top-up with nothing to do is hidden.
+    const TAG = { points: "Points", topup: "Top up", promo: "Happy hour" };
+    const items = a.items.filter(it => it.kind !== "topup" || it.action === "topup").map(it => {
+      const btn = it.action === "topup" ? `<button class="sm" data-adv-topup="${it.amount_micro}:${esc(it.chain)}">Review</button>` : "";
+      return `<div class="adv" title="${esc([it.detail, it.reason].filter(Boolean).join("\n"))}"><span class="tag">${TAG[it.kind] || esc(it.kind)}</span><span class="t">${esc(it.title)}</span>${btn}</div>`;
+    }).join("") || `<p class="note">Nothing to do right now.</p>`;
     return `<div class="agent"><div class="adv-h"><span class="hd">Agent advice</span>${src}</div>${items}<div class="adv-h"><span class="note">Suggestions only. You decide.</span><button class="link" data-ask-agent>Refresh</button></div></div>`;
   }
   async function askAgent() {
@@ -620,12 +596,6 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
     try { advice[ui] = await api("POST", "/api/advice", { user: ui }); }
     catch (e) { advice[ui] = null; toast(friendly(e), "bad"); }
     render(); if (payDone) renderPay();
-  }
-  function reviewRedeem(points, target) {
-    payDone = null; redeemTarget = target || "ATOM";
-    go("redeem");
-    $("rd-pt").value = points;
-    renderRedeem();
   }
   function openTopup(amountMicro, chain) {
     payDone = null;
@@ -641,10 +611,9 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
     $("w-menu").hidden = true;
     if (!window.keplr) return toast("Keplr is not installed in this browser.", "bad");
     try {
-      await window.keplr.enable(["injective-1", "cosmoshub-4"]);
+      await window.keplr.enable(["injective-1"]);
       const inj = await window.keplr.getKey("injective-1");
-      const cos = await window.keplr.getKey("cosmoshub-4");
-      await api("POST", "/api/wallet/connect", { user: cur, wallet: "keplr", addr: inj.bech32Address, cosmos_addr: cos.bech32Address });
+      await api("POST", "/api/wallet/connect", { user: cur, wallet: "keplr", addr: inj.bech32Address });
       toast("Keplr connected");
     } catch (e) { toast(friendly(e), "bad"); }
     await refresh();
@@ -655,7 +624,7 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
     try {
       const [eth] = await window.ethereum.request({ method: "eth_requestAccounts" });
       await api("POST", "/api/wallet/connect", { user: cur, wallet: "metamask", eth_addr: eth.toLowerCase() });
-      toast("MetaMask connected. ATOM goes to a demo Cosmos address.");
+      toast("MetaMask connected");
     } catch (e) { toast(friendly(e), "bad"); }
     await refresh();
   };
@@ -679,11 +648,11 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
     if (payDone) {
       const x = payDone;
       b.innerHTML = `<div class="done-mark">${ICON_OK}</div>
-        <div class="center"><div class="pay-amount">$${fmtU(x.paid_micro)}</div><p class="note">paid to ${esc(x.merchant)}</p></div>
+        <div class="center"><div class="pay-amount">${x.pay_with === "ATOM" ? fmtA(x.atom_in_micro) + " ATOM" : "$" + fmtU(x.paid_micro)}</div><p class="note">paid to ${esc(x.merchant)}${x.pay_with === "ATOM" ? ` · store received $${fmtU(x.paid_micro)} USDC.inj via Skip:Go` : ""}</p></div>
         <div class="lines">
           <span>Order</span><span class="n">$${fmtU(x.amount_micro)}</span>
           <span>Points used</span><span class="n">−$${fmtU(x.point_discount_micro)}</span>
-          <span class="pt">Points earned${x.promo_bps ? ` (incl. +${x.promo_bps / 100}% happy hour)` : ""}</span><span class="n pt">+${fmtP(x.points_earned)}</span>
+          <span class="pt">Points earned${x.atom_bonus_bps ? ` (incl. +${x.atom_bonus_bps / 100}% for ATOM)` : ""}${x.promo_bps ? ` (incl. +${x.promo_bps / 100}% happy hour)` : ""}</span><span class="n pt">+${fmtP(x.points_earned)}</span>
         </div>
         <p class="center">${txLink(x.tx_hash)}</p>
         ${adviceHTML()}
@@ -697,24 +666,28 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
     const m = S.merchants.find(v => v.merchant_id === qr.merchant_id) || { name: qr.merchant_id };
     let ver = null, pv = null, err = null;
     try { ver = await api("POST", "/api/qr/verify", { qr }); } catch (e) { ver = null; }
-    try { pv = await api("POST", "/api/pay/preview", { user: cur, qr, use_points: usePts }); } catch (e) { err = e; }
+    try { pv = await api("POST", "/api/pay/preview", { user: cur, qr, use_points: usePts, pay_with: payWith }); } catch (e) { err = e; }
+    lastPv = pv;
     const u = U();
     b.innerHTML = `<div class="merchant-head"><div class="mname">${esc(m.name)}</div>${ver ? verifyHTML(ver) : ""}</div>
       <div class="pay-amount">$${esc(qr.amount_usdc)}</div>
-      <div class="row-set"><div><div class="t">Use points</div><p class="note">${fmtP(u.points)} available</p></div><label class="switch" aria-label="Use points"><input type="checkbox" id="pay-pts" ${usePts ? "checked" : ""}><span></span></label></div>
+      <div class="row-set"><div><div class="t">Use points</div><p class="note">${fmtP((u.points || {})[qr.merchant_id] || 0)} available at this store</p></div><label class="switch" aria-label="Use points"><input type="checkbox" id="pay-pts" ${usePts ? "checked" : ""}><span></span></label></div>
+      <label class="field">Pay with<select id="pay-with"><option value="USDC_INJ" ${payWith === "USDC_INJ" ? "selected" : ""}>USDC.inj · ${fmtU(u.usdc_micro)}</option><option value="ATOM" ${payWith === "ATOM" ? "selected" : ""}>ATOM · ${fmtA(u.atom_micro)} · +${(m.atom_bonus_bps || 0) / 100}% points</option></select></label>
       ${pv ? `<div class="lines">
         ${pv.points_used ? `<span>Points</span><span class="n">−$${fmtU(pv.point_discount_micro)}</span>` : ""}
-        <span class="tot">You pay</span><span class="n tot">$${fmtU(pv.paid_micro)}</span>
-        <span class="pt">You earn${pv.promo_bps ? ` (+${pv.promo_bps / 100}% happy hour)` : ""}</span><span class="n pt">+${fmtP(pv.points_earned)} points</span>
+        <span class="tot">You pay</span><span class="n tot">${pv.pay_with === "ATOM" ? fmtA(pv.atom_in_micro) + " ATOM" : "$" + fmtU(pv.paid_micro)}</span>
+        ${pv.pay_with === "ATOM" ? `<span>Store receives</span><span class="n">$${fmtU(pv.paid_micro)} USDC.inj</span><span>Swap via Skip:Go</span><span class="n">at $${pv.atom_usd.toFixed(2)}, max ${fmtA(pv.atom_max_micro)} ATOM (1%)</span>` : ""}
+        <span class="pt">You earn${pv.atom_bonus_bps ? ` (+${pv.atom_bonus_bps / 100}% for ATOM)` : ""}${pv.promo_bps ? ` (+${pv.promo_bps / 100}% happy hour)` : ""}</span><span class="n pt">+${fmtP(pv.points_earned)} points</span>
       </div>` : ""}
       ${err ? `<div class="alert">${esc(friendly(err))}</div>` : ""}
-      <button class="primary block" id="pay-go">${pv ? "Pay $" + fmtU(pv.paid_micro) : "Try to pay"}</button>`;
+      <button class="primary block" id="pay-go">${pv ? "Pay " + (pv.pay_with === "ATOM" ? fmtA(pv.atom_in_micro) + " ATOM" : "$" + fmtU(pv.paid_micro)) : "Try to pay"}</button>`;
     $("pay-pts").onchange = e => { usePts = e.target.checked; renderPay(); };
+    $("pay-with").onchange = e => { payWith = e.target.value; renderPay(); };
     $("pay-go").onclick = doPay;
   }
   async function doPay() {
     try {
-      const r = await api("POST", "/api/pay", { user: cur, qr, use_points: usePts });
+      const r = await api("POST", "/api/pay", { user: cur, qr, use_points: usePts, pay_with: payWith, max_atom_micro: lastPv && lastPv.pay_with === "ATOM" ? lastPv.atom_max_micro : 0 });
       await refresh();
       const h = U().history.find(x => x.order_id === r.receipt.order_id && x.type === "PAY");
       payDone = { ...r.receipt, tx_hash: h ? h.tx_hash : "" };
@@ -733,12 +706,14 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
     { id: "8453", sym: "USDC", on: "Base" },
     { id: "1", sym: "USDC", on: "Ethereum" },
     { id: "solana", sym: "USDC", on: "Solana" },
+    { id: "cosmoshub-4", sym: "ATOM", on: "Cosmos Hub" },
   ];
   let tuChain = SOURCES[0].id;
   const USDC_ICON = '<svg class="coin" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="16" fill="#2775ca"/><circle cx="16" cy="16" r="10.5" fill="none" stroke="#fff" stroke-width="1.6"/><text x="16" y="21" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="13" font-weight="700" fill="#fff">$</text></svg>';
   const CHEV = '<span class="chev"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></span>';
-  const srcHTML = s => `<span class="pill2">${USDC_ICON}<span class="sym">${esc(s.sym)}</span></span><span class="on">on ${esc(s.on)}</span>`;
-  const srcBal = s => { const h = S && U().holdings_micro ? U().holdings_micro[s.id] || 0 : null; return h === null ? "" : `<span class="src-bal"><span class="note">Balance</span><b>${fmtU(h)}</b></span>`; };
+  const ATOM_ICON = '<svg class="coin" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="16" fill="#2e3148"/><ellipse cx="16" cy="16" rx="11" ry="4.2" fill="none" stroke="#fff" stroke-width="1.3"/><ellipse cx="16" cy="16" rx="11" ry="4.2" fill="none" stroke="#fff" stroke-width="1.3" transform="rotate(60 16 16)"/><ellipse cx="16" cy="16" rx="11" ry="4.2" fill="none" stroke="#fff" stroke-width="1.3" transform="rotate(-60 16 16)"/><circle cx="16" cy="16" r="1.8" fill="#fff"/></svg>';
+  const srcHTML = s => `<span class="pill2">${s.sym === "ATOM" ? ATOM_ICON : USDC_ICON}<span class="sym">${esc(s.sym)}</span></span><span class="on">on ${esc(s.on)}</span>`;
+  const srcBal = s => { const h = S && U().holdings_micro ? U().holdings_micro[s.id] || 0 : null; return h === null ? "" : `<span class="src-bal"><span class="note">Balance</span><b>${walletAmt(s, h)}</b></span>`; };
   function renderAssetPick() {
     const s = SOURCES.find(x => x.id === tuChain);
     $("tu-asset").innerHTML = `<span class="asset-col">${srcHTML(s)}</span><span class="src-r">${srcBal(s)}${CHEV}</span>`;
@@ -759,8 +734,8 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
   async function quoteTopup() {
     try {
       const q = await api("POST", "/api/topup/quote", tuReq());
-      $("tu-quote").innerHTML = `<div class="lines"><span>You send</span><span class="n">${fmtU(q.amount_micro)} ${esc(q.denom)}</span><span>${q.chain === "injective-1" ? "Fee" : "Route fee"}</span><span class="n">−${fmtU(q.fee_micro)}</span><span class="tot">Added to vault</span><span class="n tot">${fmtU(q.out_micro)} USDC.inj</span></div>${q.chain === "injective-1" ? "" : `<p class="note">Skip:Go converts ${esc(q.denom)} to USDC.inj and deposits it. No separate swap.</p>`}`;
-      $("tu-go").textContent = `Top up ${fmtU(q.out_micro)} USDC.inj`;
+      $("tu-quote").innerHTML = `<div class="lines"><span>You send</span><span class="n">${q.denom === "ATOM" ? `ATOM worth $${fmtU(q.amount_micro)}` : `${fmtU(q.amount_micro)} ${esc(q.denom)}`}</span><span>${q.chain === "injective-1" ? "Fee" : "Route fee"}</span><span class="n">−${fmtU(q.fee_micro)}</span><span class="tot">Added to vault</span><span class="n tot">${q.denom === "ATOM" ? fmtA(q.atom_out_micro) + " ATOM" : fmtU(q.out_micro) + " USDC.inj"}</span></div>${q.chain === "injective-1" ? "" : q.denom === "ATOM" ? `<p class="note">Skip:Go moves ATOM to Injective over IBC and deposits it into your vault at $${q.atom_usd.toFixed(2)}. Pay with ATOM at the counter. You sign the route in your own wallet.</p>` : `<p class="note">Skip:Go converts ${esc(q.denom)} to USDC.inj and deposits it into your vault. You sign the route in your own wallet.</p>`}`;
+      $("tu-go").textContent = `Top up ${q.denom === "ATOM" ? fmtA(q.atom_out_micro) + " ATOM" : fmtU(q.out_micro) + " USDC.inj"}`;
       $("tu-go").disabled = false;
     } catch (e) {
       $("tu-quote").innerHTML = `<div class="alert">${esc(friendly(e))}</div>`;
@@ -768,58 +743,26 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
     }
   }
   $("tu-go").onclick = async () => {
-    try { const q = await api("POST", "/api/topup", tuReq()); toast(`Added $${fmtU(q.out_micro)} to your balance`); go("home"); }
+    try { const q = await api("POST", "/api/topup", tuReq()); toast(q.denom === "ATOM" ? `Added ${fmtA(q.atom_out_micro)} ATOM to your vault` : `Added $${fmtU(q.out_micro)} to your balance`); go("home"); }
     catch (e) { toast(friendly(e), "bad"); }
     await refresh();
   };
 
-  // ---------- redeem ----------
-  $("rd-pt").oninput = renderRedeem;
-  $("rd-max").onclick = () => { $("rd-pt").value = U().points; renderRedeem(); };
-  async function renderRedeem() {
-    const u = U();
-    const p = Math.max(0, Math.floor(Number($("rd-pt").value) || 0));
-    $("rd-avail").textContent = `${fmtP(u.points)} available`;
-    const pr = S.prices || {};
-    const src = pr.ATOM && pr.ATOM.source === "coingecko" ? `CoinGecko, updated ${hhmm(pr.ATOM.updated)}` : "sample prices (live feed unavailable)";
-    const nx = S.boost && S.boost.next_update ? ` · bonus fixed until ${hhmm(S.boost.next_update)} KST` : "";
-    $("rd-price").textContent = pr.ATOM ? `ATOM $${pr.ATOM.usd.toFixed(3)} · ${src}${nx}` : "";
-    let rows;
-    try { rows = await api("GET", "/api/redeem/quote?points=" + p); }
-    catch (e) { $("rd-opts").innerHTML = `<div class="alert">${esc(friendly(e))}</div>`; $("rd-go").disabled = true; return; }
-    const dest = { ATOM: "to your Cosmos Hub wallet", USDC_INJ: "to your balance, +1% points next payment" };
-    const base = (rows.find(q => q.asset === "USDC_INJ") || {}).net_micro || 0;
-    $("rd-opts").innerHTML = rows.map(q => {
-      const bonus = q.boost_bps ? `<span class="pill acc">+${q.boost_bps / 100}% bonus</span>` : "";
-      const more = base && q.net_micro > base ? `<span class="more">+${((q.net_micro / base - 1) * 100).toFixed(1)}% vs USDC.inj</span>` : "";
-      return `<label class="opt ${q.asset === redeemTarget ? "sel" : ""}">
-      <input type="radio" name="rd" value="${q.asset}" ${q.asset === redeemTarget ? "checked" : ""}>
-      <div><div class="t">${esc(q.label)} ${bonus} ${q.best ? '<span class="pill ok">Most reward per point</span>' : ""}</div><p class="note">${dest[q.asset]}</p></div>
-      <div class="v"><b>${amt(q.asset, q.amount)}</b><span class="note">$${(q.net_micro / MICRO).toFixed(2)}</span>${more}</div></label>`;
-    }).join("");
-    $("rd-opts").querySelectorAll("input").forEach(r => r.onchange = () => { redeemTarget = r.value; renderRedeem(); });
-    const sel = rows.find(q => q.asset === redeemTarget);
-    $("rd-go").disabled = !(p > 0 && p <= u.points);
-    $("rd-go").textContent = !p ? "Enter points" : p > u.points ? "Not enough points" : `Get ${amt(sel.asset, sel.amount)} ${sel.label}`;
-  }
-  $("rd-go").onclick = async () => {
-    try {
-      const q = await api("POST", "/api/redeem", { user: cur, points: Math.floor(Number($("rd-pt").value)), target: redeemTarget, source: "manual" });
-      toast(`Redeemed for ${amt(q.asset, q.amount)} ${q.label}`); go("home");
-    } catch (e) { toast(friendly(e), "bad"); }
-    await refresh();
-  };
 
   // ---------- withdraw ----------
   function renderWithdraw() {
     const u = U();
-    $("wd-avail").textContent = `$${fmtU(u.usdc_micro)} available`;
+    const atom = $("wd-asset").value === "ATOM";
+    $("wd-avail").textContent = atom ? `${fmtA(u.atom_micro)} ATOM available` : `$${fmtU(u.usdc_micro)} available`;
     $("wd-to").textContent = short(u.addr);
-    if (!$("wd-amt").value) $("wd-amt").value = fmtU(u.usdc_micro);
+    if (!$("wd-amt").value) $("wd-amt").value = atom ? fmtA(u.atom_micro) : fmtU(u.usdc_micro);
   }
-  $("wd-max").onclick = () => { $("wd-amt").value = fmtU(U().usdc_micro); };
+  const wdMax = () => $("wd-asset").value === "ATOM" ? fmtA(U().atom_micro) : fmtU(U().usdc_micro);
+  $("wd-asset").onchange = () => { $("wd-amt").value = wdMax(); renderWithdraw(); };
+  $("wd-max").onclick = () => { $("wd-amt").value = wdMax(); };
   $("wd-go").onclick = async () => {
-    try { await api("POST", "/api/withdraw", { user: cur, amount_usdc: Number($("wd-amt").value) }); toast(`Withdrew $${Number($("wd-amt").value).toFixed(2)}`); $("wd-amt").value = ""; go("home"); }
+    const asset = $("wd-asset").value;
+    try { await api("POST", "/api/withdraw", { user: cur, asset, amount_usdc: Number($("wd-amt").value) }); toast(asset === "ATOM" ? `Withdrew ${Number($("wd-amt").value).toFixed(2)} ATOM` : `Withdrew $${Number($("wd-amt").value).toFixed(2)}`); $("wd-amt").value = ""; go("home"); }
     catch (e) { toast(friendly(e), "bad"); }
     await refresh();
   };
@@ -830,7 +773,6 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
     $("fp-toggle").checked = s.active;
     $("fp-note").textContent = s.active ? `No wallet popup at the counter · $${fmtU(s.spent_today_micro)} used today` : "Off · your wallet asks to sign each payment";
     $("st-ptx").value = s.per_tx_micro / MICRO; $("st-day").value = s.daily_micro / MICRO;
-    $("st-min").value = u.policy.threshold;
     showErr("st-err", null);
   }
   $("fp-toggle").onchange = async e => {
@@ -840,7 +782,7 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
   };
   $("st-save").onclick = async () => {
     try {
-      await api("POST", "/api/policy", { user: cur, per_tx_usdc: Number($("st-ptx").value), daily_usdc: Number($("st-day").value), threshold: Math.floor(Number($("st-min").value)) });
+      await api("POST", "/api/policy", { user: cur, per_tx_usdc: Number($("st-ptx").value), daily_usdc: Number($("st-day").value) });
       toast("Settings saved"); go("home");
     } catch (e) { showErr("st-err", e); }
     await refresh();
@@ -923,7 +865,8 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
     $("md-status").innerHTML = (m.promo ? `<span class="pill acc">Happy hour ${promoText(m.promo)}</span> ` : "") + (m.status === "ACTIVE" ? '<span class="pill ok">Approved</span>' : '<span class="pill bad">Suspended</span>');
     $("md-kpis").innerHTML =
       kpi("Sales", "$" + fmtU(m.sales_micro), plural(m.orders, "order")) +
-      kpi("Received", "$" + fmtU(m.received_micro), `after ${(m.fee_bps / 100).toFixed(2)}% fee`);
+      kpi("Received", "$" + fmtU(m.received_micro), "no per-payment fee") +
+      kpi("Point discounts", "$" + fmtU(m.discount_micro), "on points this store gave");
     const pays = [];
     S.users.forEach((u, ui) => u.history.forEach(h => { if (h.type === "PAY" && h.merchant_id === id) pays.push({ ...h, who: u.name, ui }); }));
     pays.sort((a, b) => new Date(b.time) - new Date(a.time));
@@ -942,44 +885,17 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
 
   // ---------- operator ----------
   function renderOperator() {
-    const st = S.stats, p = S.pool;
-    const assets = [["ATOM", "ATOM", "var(--accent)"], ["USDC_INJ", "USDC.inj", "var(--muted)"]];
-    const total = assets.reduce((s, [a]) => s + st.redeemed[a].value_micro, 0);
-    const atomShare = total ? (st.redeemed.ATOM.value_micro / total * 100).toFixed(0) + "%" : "–";
+    const st = S.stats, t = S.totals;
     const blocked = Object.values(st.rejected).reduce((s, n) => s + n, 0);
     $("op-kpis").innerHTML =
       kpi("Sales volume", "$" + fmtU(st.gmv_micro), plural(st.payments, "payment")) +
-      kpi("ATOM share", atomShare, "of redeemed value") +
+      kpi("Unused points", "$" + fmtU(t.liability_micro), "each store's own discount") +
       kpi("Points earned", fmtP(st.points_minted), `$${fmtU(st.paid_usdc_micro)} paid in USDC`) +
       kpi("Blocked payments", String(blocked), "nothing charged");
 
-    $("op-atom-share").textContent = total ? `ATOM ${atomShare} of value` : "none yet";
-    $("op-bars").innerHTML = assets.map(([a, label, col]) => {
-      const r = st.redeemed[a];
-      const pct = total ? r.value_micro / total * 100 : 0;
-      return `<div class="bar"><span>${label}</span><span class="tr"><i style="width:${pct.toFixed(1)}%;background:${col}"></i></span><span class="n">$${fmtU(r.value_micro)}</span></div>`;
-    }).join("");
-
-    const cov = p.liability_micro > 0 ? p.balance_micro / p.liability_micro : Infinity;
-    const col = cov >= 1 ? "var(--ok)" : cov >= 0.5 ? "var(--warn)" : "var(--bad)";
-    $("rp-bal").textContent = "$" + fmtU(p.balance_micro);
-    $("rp-liab").textContent = "$" + fmtU(p.liability_micro);
-    $("rp-cov").innerHTML = `<span style="color:${col}">${isFinite(cov) ? (cov * 100).toFixed(0) + "%" : "n/a"}</span>`;
-    $("rp-m").style.width = Math.min(100, isFinite(cov) ? cov * 100 : 100) + "%";
-    $("rp-m").style.background = col;
-    $("rp-in").textContent = "+$" + fmtU(p.fees_in_micro);
-    $("rp-out").textContent = "−$" + fmtU(p.discount_out_micro + p.redeem_out_micro);
-    $("rp-pause").textContent = p.paused ? "Resume rewards" : "Pause rewards";
-    const bo = S.boost || {};
-    $("bs-atom").textContent = "+" + (S.boost_bps.ATOM / 100) + "%";
-    $("bs-src").innerHTML = bo.source === "ai" ? `<span class="pill acc">Set by AI · ${esc(bo.model)}</span>` : `<span class="pill mute" title="${esc(bo.note || "")}">Set by rules</span>`;
-    $("bs-reason").textContent = bo.reason ? `${bo.kind === "emergency" ? "Emergency cut. " : ""}${bo.reason} Set ${hhmm(bo.updated)}; next daily update ${hhmm(bo.next_update)} KST.` : "Waiting for the first update.";
-    $("rp-cap").textContent = "$" + fmtU(p.daily_cap_micro);
-    $("op-rev").textContent = "$" + fmtU(st.operator_fees_micro);
-
     const stores = [...S.merchants].sort((a, b) => b.sales_micro - a.sales_micro);
-    $("op-stores").innerHTML = `<thead><tr><th>Store</th><th>Status</th><th>Happy hour</th><th class="n">Orders</th><th class="n">Sales</th><th class="n">Fee</th></tr></thead><tbody>` +
-      stores.map(m => `<tr><td>${esc(m.name)}</td><td><button class="sm" data-m="${esc(m.merchant_id)}"><span class="pill ${m.status === "ACTIVE" ? "ok" : "bad"}">${m.status === "ACTIVE" ? "Approved" : "Suspended"}</span></button></td><td>${m.promo ? promoText(m.promo) : "–"}</td><td class="n">${m.orders}</td><td class="n">$${fmtU(m.sales_micro)}</td><td class="n" title="${esc(m.tier)} · pool ${(m.pool_bps / 100).toFixed(2)}%">${(m.fee_bps / 100).toFixed(2)}%</td></tr>`).join("") + `</tbody>`;
+    $("op-stores").innerHTML = `<thead><tr><th>Store</th><th>Status</th><th>Happy hour</th><th class="n">Orders</th><th class="n">Sales</th><th class="n">Subscription</th></tr></thead><tbody>` +
+      stores.map(m => `<tr><td>${esc(m.name)}</td><td><button class="sm" data-m="${esc(m.merchant_id)}"><span class="pill ${m.status === "ACTIVE" ? "ok" : "bad"}">${m.status === "ACTIVE" ? "Approved" : "Suspended"}</span></button></td><td>${m.promo ? promoText(m.promo) : "–"}</td><td class="n">${m.orders}</td><td class="n">$${fmtU(m.sales_micro)}</td><td class="n" title="${esc(m.tier)} · billed monthly in KRW">${m.subscription_krw ? `₩${m.subscription_krw.toLocaleString("en-US")}/mo` : "Free"}</td></tr>`).join("") + `</tbody>`;
     $("op-stores").querySelectorAll("[data-m]").forEach(b => b.onclick = async () => { await api("POST", "/api/merchants/status", { merchant_id: b.dataset.m }).catch(() => {}); await refresh(); });
 
     const rows = Object.entries(st.rejected).sort((a, b) => b[1] - a[1]);
@@ -989,8 +905,6 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
 
     $("log").innerHTML = S.events.filter(ev => ev.tx_hash).map(ev => `<div class="ev ev-${esc(ev.kind)}"><div class="h"><span>${esc(ev.msg)}</span><span class="m">${esc(ev.signer)}</span><span class="t">${hhmm(ev.time)}</span></div><div class="b">${esc(ev.body)}</div>${txLink(ev.tx_hash, "Tx " + ev.tx_hash.slice(0, 8) + "…")}</div>`).join("");
   }
-  $("rp-fund").onclick = async () => { await api("POST", "/api/pool/fund", {}); await refresh(); };
-  $("rp-pause").onclick = async () => { await api("POST", "/api/pool/pause", {}); await refresh(); };
 
   refresh().then(() => go("home")).catch(e => { document.querySelector(".sub").textContent = "Cannot reach the server: " + friendly(e); });
 })();

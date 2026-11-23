@@ -1,5 +1,5 @@
 // Package engine simulates the on-chain contracts: Prepaid Vault, Whitelist Registry,
-// soulbound POINT and Reward Pool. State is in memory and resets on restart.
+// and soulbound POINT. State is in memory and resets on restart.
 package engine
 
 import (
@@ -19,8 +19,7 @@ type Engine struct {
 	mu           sync.Mutex
 	users        []*User
 	merchants    []*Merchant
-	pool         Pool
-	boostBps     map[Asset]int64
+	gasINJ       float64                       // platform feegrant budget
 	merchantKeys map[string]ed25519.PrivateKey // held by each merchant POS in production
 	paid         map[string]bool
 	seq          int
@@ -31,9 +30,7 @@ type Engine struct {
 	txSeq        int
 	curTx        string
 	stats        Stats
-	prices       map[Asset]PriceInfo
-	boostState   BoostState
-	prevBoost    map[Asset]int64
+	atomPrice    PriceInfo
 }
 
 func New() *Engine {
@@ -43,18 +40,17 @@ func New() *Engine {
 	}
 	e := &Engine{
 		users: []*User{
-			newUser("Minji", "inj1user987654321", "cosmos1user9876543", 25, 1200),
-			newUser("Jaehyun", "inj1user123450987", "cosmos1user1234509", 80, 80),
-			newUser("Sora", "inj1user555000111", "cosmos1user5550001", 5, 3400),
+			newUser("Minji", "inj1user987654321", 25),
+			newUser("Jaehyun", "inj1user123450987", 80),
+			newUser("Sora", "inj1user555000111", 5),
 		},
 		merchants: []*Merchant{
-			{ID: "MRC_BAR_001", Name: "Seongsu Pub", Category: "BAR", Status: StatusActive, SettlementAddr: "inj1abc...xyz", FeeBps: 30, PoolBps: 20, PointEarnBps: 20, Tier: "Small"},
-			{ID: "MRC_CAFE_002", Name: "Yeonnam Drip Coffee", Category: "CAFE", Status: StatusActive, SettlementAddr: "inj1def...uvw", FeeBps: 30, PoolBps: 20, PointEarnBps: 20, Tier: "Small"},
-			{ID: "MRC_REST_014", Name: "Euljiro Noodle House", Category: "RESTAURANT", Status: StatusActive, SettlementAddr: "inj1ghi...rst", FeeBps: 60, PoolBps: 40, PointEarnBps: 40, Tier: "SME 0.3-0.5B"},
-			{ID: "MRC_REST_031", Name: "Mangwon Bistro", Category: "RESTAURANT", Status: StatusSuspended, SettlementAddr: "inj1jkl...opq", FeeBps: 70, PoolBps: 45, PointEarnBps: 45, Tier: "SME 0.5-1B"},
+			{ID: "MRC_BAR_001", Name: "Seongsu Pub", Category: "BAR", Status: StatusActive, SettlementAddr: "inj1abc...xyz", SubscriptionKRW: 0, PointEarnBps: 20, AtomBonusBps: 100, Tier: "Small"},
+			{ID: "MRC_CAFE_002", Name: "Yeonnam Drip Coffee", Category: "CAFE", Status: StatusActive, SettlementAddr: "inj1def...uvw", SubscriptionKRW: 0, PointEarnBps: 20, AtomBonusBps: 100, Tier: "Small"},
+			{ID: "MRC_REST_014", Name: "Euljiro Noodle House", Category: "RESTAURANT", Status: StatusActive, SettlementAddr: "inj1ghi...rst", SubscriptionKRW: 30_000, PointEarnBps: 40, AtomBonusBps: 100, Tier: "SME 0.3-0.5B"},
+			{ID: "MRC_REST_031", Name: "Mangwon Bistro", Category: "RESTAURANT", Status: StatusSuspended, SettlementAddr: "inj1jkl...opq", SubscriptionKRW: 30_000, PointEarnBps: 45, AtomBonusBps: 100, Tier: "SME 0.3-0.5B"},
 		},
-		pool:         Pool{Balance: 300 * Micro, DailyCap: 700 * Micro, GasINJ: 25},
-		boostBps:     map[Asset]int64{ATOM: 700, USDCINJ: 0},
+		gasINJ:       25,
 		merchantKeys: map[string]ed25519.PrivateKey{},
 		paid:         map[string]bool{},
 		seq:          42,
@@ -62,15 +58,7 @@ func New() *Engine {
 		now:          time.Now,
 	}
 	e.stats.Rejected = map[string]int{}
-	e.stats.Redeemed = map[Asset]*AssetStat{}
-	for _, a := range Assets {
-		e.stats.Redeemed[a] = &AssetStat{}
-	}
 	e.seedSample()
-	e.prices = map[Asset]PriceInfo{}
-	for a, p := range price {
-		e.prices[a] = PriceInfo{USD: p, Source: "sample", Updated: e.now()}
-	}
 	for _, m := range e.merchants {
 		pub, priv, err := ed25519.GenerateKey(rand.Reader)
 		if err != nil {
@@ -88,14 +76,21 @@ func New() *Engine {
 	return e
 }
 
-func newUser(name, addr, cosmos string, usdc, points int64) *User {
+func newUser(name, addr string, usdc int64) *User {
 	return &User{
-		Name: name, Addr: addr, CosmosAddr: cosmos, demoAddr: addr, demoCosmos: cosmos,
-		USDC: usdc * Micro, Points: points,
+		Name: name, Addr: addr, demoAddr: addr,
+		USDC: usdc * Micro, Points: map[string]int64{},
 		Session: Session{Active: true, PerTx: 50 * Micro, Daily: 200 * Micro},
-		Policy:  Policy{Threshold: 500},
 		History: []*HistoryEntry{},
 	}
+}
+
+// atomPriceView reports the price in use, including the sample fallback.
+func (e *Engine) atomPriceView() PriceInfo {
+	if e.atomPrice.USD > 0 {
+		return e.atomPrice
+	}
+	return PriceInfo{USD: sampleATOMUSD, Source: "sample"}
 }
 
 func (e *Engine) today() string { return e.now().Format("2006-01-02") }
@@ -103,7 +98,7 @@ func (e *Engine) today() string { return e.now().Format("2006-01-02") }
 // touch resets per-user daily counters when the date changes.
 func (e *Engine) touch(u *User) {
 	if d := e.today(); u.day != d {
-		u.day, u.Session.SpentToday, u.RedeemedToday = d, 0, 0
+		u.day, u.Session.SpentToday = d, 0
 	}
 }
 
@@ -136,7 +131,7 @@ func (e *Engine) newTx() {
 
 // onChain reports whether a log message is a contract call that would have a tx hash.
 func onChain(msg string) bool {
-	for _, p := range []string{"Vault.", "RewardPool.", "Registry."} {
+	for _, p := range []string{"Vault.", "Registry."} {
 		if strings.HasPrefix(msg, p) {
 			return true
 		}
@@ -162,36 +157,38 @@ func (e *Engine) addHistory(u *User, h *HistoryEntry) *HistoryEntry {
 	return h
 }
 
-type poolView struct {
-	Pool
-	Liability int64 `json:"liability_micro"`
-	Vaults    int64 `json:"vaults_micro"`
+type totals struct {
+	Liability int64   `json:"liability_micro"` // unused POINT at face value
+	Vaults    int64   `json:"vaults_micro"`
+	VaultATOM int64   `json:"vault_atom_micro"`
+	GasINJ    float64 `json:"gas_inj"`
 }
 
 type state struct {
-	Users     []*User             `json:"users"`
-	Merchants []*Merchant         `json:"merchants"`
-	Pool      poolView            `json:"pool"`
-	BoostBps  map[Asset]int64     `json:"boost_bps"`
-	Events    []Event             `json:"events"`
-	Stats     Stats               `json:"stats"`
-	Prices    map[Asset]PriceInfo `json:"prices"`
-	Boost     BoostState          `json:"boost"`
+	Users     []*User     `json:"users"`
+	Merchants []*Merchant `json:"merchants"`
+	Totals    totals      `json:"totals"`
+	Events    []Event     `json:"events"`
+	Stats     Stats       `json:"stats"`
+	AtomPrice PriceInfo   `json:"atom_price"`
 }
 
 // StateJSON returns the full simulated chain state.
 func (e *Engine) StateJSON() ([]byte, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	pv := poolView{Pool: e.pool}
+	pv := totals{GasINJ: e.gasINJ}
 	now := e.now()
 	for _, u := range e.users {
 		e.touch(u)
-		pv.Liability += u.Points * PointValue
+		for _, p := range u.Points {
+			pv.Liability += p * PointValue
+		}
 		pv.Vaults += u.USDC
+		pv.VaultATOM += u.ATOM
 		for _, h := range u.History {
 			h.Refundable = h.Type == "PAY" && h.Status == "PAID" && now.Sub(h.Time) < RefundWindow
 		}
 	}
-	return json.Marshal(state{Users: e.users, Merchants: e.merchants, Pool: pv, BoostBps: e.boostBps, Events: e.events, Stats: e.stats, Prices: e.prices, Boost: e.boostState})
+	return json.Marshal(state{Users: e.users, Merchants: e.merchants, Totals: pv, Events: e.events, Stats: e.stats, AtomPrice: e.atomPriceView()})
 }

@@ -4,6 +4,7 @@ import (
 	"crypto/ed25519"
 	"encoding/hex"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -120,18 +121,22 @@ func (e *Engine) VerifyQR(req VerifyRequest) (*QRVerification, error) {
 }
 
 type PayRequest struct {
-	User      int  `json:"user"`
-	QR        *QR  `json:"qr"`
-	UsePoints bool `json:"use_points"`
+	User      int    `json:"user"`
+	QR        *QR    `json:"qr"`
+	UsePoints bool   `json:"use_points"`
+	PayWith   string `json:"pay_with"`       // USDC_INJ (default) or ATOM
+	MaxAtom   int64  `json:"max_atom_micro"` // from the preview; required when paying with ATOM
 }
 
 type payCalc struct {
-	q                              *QR
-	m                              *Merchant
-	amount, pUsed, aPt, aUsdc, fee int64
-	earnBps, pEarned, promoBps     int64
-	poolFee                        int64
-	bonus                          bool
+	q                          *QR
+	m                          *Merchant
+	amount, pUsed, aPt, aUsdc  int64
+	earnBps, pEarned, promoBps int64
+	atomBonusBps               int64
+	payWith                    string
+	atomIn, atomMax            int64
+	atomUSD                    float64
 }
 
 // calcPay runs every ExecuteQrPayment check and computes the split without changing state.
@@ -165,8 +170,8 @@ func (e *Engine) calcPay(u *User, req PayRequest) (*payCalc, *Error) {
 		return nil, errf("ERR_ORDER_ALREADY_PAID", "%s already settled", q.OrderID)
 	}
 	c := &payCalc{q: q, m: m, amount: amount}
-	if req.UsePoints && !e.pool.Paused {
-		c.pUsed = min(u.Points, c.amount/PointValue)
+	if req.UsePoints {
+		c.pUsed = min(u.Points[m.ID], c.amount/PointValue)
 	}
 	c.aPt = c.pUsed * PointValue
 	c.aUsdc = c.amount - c.aPt
@@ -177,24 +182,36 @@ func (e *Engine) calcPay(u *User, req PayRequest) (*payCalc, *Error) {
 	if s.Active && s.SpentToday+c.aUsdc > s.Daily {
 		return nil, errf("ERR_SESSION_DAILY_LIMIT", "$%s > $%s/day", FormatUSDC(s.SpentToday+c.aUsdc), FormatUSDC(s.Daily))
 	}
-	if u.USDC < c.aUsdc {
-		return nil, errf("ERR_INSUFFICIENT_VAULT", "need %s USDC.inj, Vault has %s", FormatUSDC(c.aUsdc), FormatUSDC(u.USDC))
+	switch req.PayWith {
+	case "", PayUSDC:
+		c.payWith = PayUSDC
+		if u.USDC < c.aUsdc {
+			return nil, errf("ERR_INSUFFICIENT_VAULT", "need %s USDC.inj, Vault has %s", FormatUSDC(c.aUsdc), FormatUSDC(u.USDC))
+		}
+	case PayATOM:
+		// Exact-out swap: Skip:Go sells enough ATOM to deliver aUsdc USDC.inj to the merchant.
+		c.payWith, c.atomUSD = PayATOM, e.atomUSD()
+		c.atomIn = int64(math.Ceil(float64(c.aUsdc) / c.atomUSD * 10_000 / float64(10_000-atomSwapFeeBps)))
+		c.atomMax = c.atomIn * (10_000 + maxSlippageBps) / 10_000
+		if req.MaxAtom > 0 && c.atomIn > req.MaxAtom {
+			return nil, errf("ERR_SLIPPAGE", "ATOM needed %s > limit %s; review the new price", FormatAtom(c.atomIn), FormatAtom(req.MaxAtom))
+		}
+		if u.ATOM < c.atomIn {
+			return nil, errf("ERR_INSUFFICIENT_VAULT", "need %s ATOM, Vault has %s", FormatAtom(c.atomIn), FormatAtom(u.ATOM))
+		}
+	default:
+		return nil, errf("ERR_BAD_ASSET", "pay_with must be USDC_INJ or ATOM")
 	}
-	if c.aPt > e.pool.Balance {
-		return nil, errf("ERR_POOL_INSUFFICIENT", "Reward Pool cannot cover the POINT discount")
-	}
-	c.fee = c.aUsdc * m.FeeBps / 10_000
-	c.poolFee = c.aUsdc * m.PoolBps / 10_000
 	if m.Promo != nil && promoActive(m.Promo, e.now()) {
-		// Happy-hour points are paid by the merchant as an extra fee into the Reward Pool.
+		// Happy-hour points are a merchant-approved promotion; no extra fee is charged.
 		c.promoBps = m.Promo.ExtraBps
-		c.fee += c.amount * c.promoBps / 10_000
-		c.poolFee += c.amount * c.promoBps / 10_000
 	}
-	c.earnBps = m.PointEarnBps + u.NextEarnBonusBps + c.promoBps
+	if c.payWith == PayATOM {
+		c.atomBonusBps = m.AtomBonusBps
+	}
+	c.earnBps = m.PointEarnBps + c.atomBonusBps + c.promoBps
 	// Base earn applies to the USDC-paid part only; happy-hour points apply to the whole order.
 	c.pEarned = (c.aUsdc*(c.earnBps-c.promoBps) + c.amount*c.promoBps) / 10_000 / PointValue
-	c.bonus = u.NextEarnBonusBps > 0
 	return c, nil
 }
 
@@ -205,7 +222,8 @@ func receipt(c *payCalc, sessionActive bool) Receipt {
 	}
 	return Receipt{
 		OrderID: c.q.OrderID, Merchant: c.m.Name, Amount: c.amount, PointsUsed: c.pUsed, PointDiscount: c.aPt,
-		Paid: c.aUsdc, PointsEarned: c.pEarned, EarnBps: c.earnBps, PromoBps: c.promoBps, BonusApplied: c.bonus, SignedBy: signedBy,
+		Paid: c.aUsdc, PointsEarned: c.pEarned, EarnBps: c.earnBps, PromoBps: c.promoBps, AtomBonusBps: c.atomBonusBps, SignedBy: signedBy,
+		PayWith: c.payWith, AtomIn: c.atomIn, AtomMax: c.atomMax, AtomUSD: c.atomUSD,
 	}
 }
 
@@ -240,28 +258,33 @@ func (e *Engine) Pay(req PayRequest) (*PayResult, error) {
 	}
 	e.newTx() // a reverted tx still has a hash
 	c, x := e.calcPay(u, req)
+	if x == nil && req.PayWith == PayATOM && req.MaxAtom <= 0 {
+		x = errf("ERR_SLIPPAGE", "max_atom_micro from the preview is required when paying with ATOM")
+	}
 	if x != nil {
 		e.stats.Rejected[x.Code]++
 		e.log("bad", signer, "Vault.ExecuteQrPayment", fmt.Sprintf("%s · %s · %s · tx reverted, nothing moved", u.Name, x.Code, x.Message))
 		return nil, x
 	}
 
-	u.USDC -= c.aUsdc
-	u.Points += c.pEarned - c.pUsed
-	u.NextEarnBonusBps = 0
+	delta := "-" + FormatUSDC(c.aUsdc) + " " + PayCurrency
+	if c.payWith == PayATOM {
+		u.ATOM -= c.atomIn
+		delta = "-" + FormatAtom(c.atomIn) + " ATOM"
+		e.log("skip", signer, "SkipClient.executeRoute()", fmt.Sprintf("%s · swap %s ATOM -> %s USDC.inj on injective-1 at $%.2f (limit %s ATOM), output to %s",
+			u.Name, FormatAtom(c.atomIn), FormatUSDC(c.aUsdc), c.atomUSD, FormatAtom(req.MaxAtom), c.m.SettlementAddr))
+	} else {
+		u.USDC -= c.aUsdc
+	}
+	u.Points[c.m.ID] += c.pEarned - c.pUsed
 	if s.Active {
 		s.SpentToday += c.aUsdc
 	}
-	e.pool.Balance += c.poolFee - c.aPt
-	e.pool.FeesIn += c.poolFee
-	e.stats.OperatorFees += c.fee - c.poolFee
-	e.pool.DiscountOut += c.aPt
-	e.pool.GasINJ = max(0, e.pool.GasINJ-gasPerTxINJ)
-	c.m.Received += c.aUsdc - c.fee + c.aPt
+	e.gasINJ = max(0, e.gasINJ-gasPerTxINJ)
+	c.m.Received += c.aUsdc
 	c.m.Orders++
 	c.m.Sales += c.amount
-	c.m.Fees += c.fee
-	c.m.PointComp += c.aPt
+	c.m.Discounts += c.aPt
 	e.stats.Payments++
 	e.stats.GMV += c.amount
 	e.stats.PaidUSDC += c.aUsdc
@@ -273,12 +296,12 @@ func (e *Engine) Pay(req PayRequest) (*PayResult, error) {
 	e.addHistory(u, &HistoryEntry{
 		Type: "PAY", Status: "PAID", Desc: c.m.Name,
 		Note:  fmt.Sprintf("%d P used · +%d P earned", c.pUsed, c.pEarned),
-		Delta: "-" + FormatUSDC(c.aUsdc) + " " + PayCurrency, OrderID: c.q.OrderID, MerchantID: c.m.ID,
-		Amount: c.amount, PointsUsed: c.pUsed, PaidUSDC: c.aUsdc, Fee: c.fee, PoolFee: c.poolFee, PointsEarned: c.pEarned,
+		Delta: delta, OrderID: c.q.OrderID, MerchantID: c.m.ID,
+		Amount: c.amount, PointsUsed: c.pUsed, PaidUSDC: c.aUsdc, PointsEarned: c.pEarned,
 	})
 	e.log("ok", signer, "Vault.ExecuteQrPayment", fmt.Sprintf(
-		"%s · %s · registry %s ACTIVE · sig/expiry/order ok · session limits ok\nburn %d POINT (pool pays $%s) · Vault -%s · merchant +%s · pool fee +%s · mint %d POINT",
-		u.Name, c.q.OrderID, c.m.ID, c.pUsed, FormatUSDC(c.aPt), FormatUSDC(c.aUsdc), FormatUSDC(c.aUsdc-c.fee+c.aPt), FormatUSDC(c.fee), c.pEarned))
+		"%s · %s · registry %s ACTIVE · sig/expiry/order ok · session limits ok\nburn %d %s POINT (merchant discount $%s) · Vault -%s · merchant +%s · mint %d %s POINT",
+		u.Name, c.q.OrderID, c.m.ID, c.pUsed, c.m.ID, FormatUSDC(c.aPt), FormatUSDC(c.aUsdc), FormatUSDC(c.aUsdc), c.pEarned, c.m.ID))
 
 	return &PayResult{Receipt: receipt(c, s.Active)}, nil
 }
@@ -312,19 +335,17 @@ func (e *Engine) Refund(req RefundRequest) error {
 	m := e.merchant(h.MerchantID)
 	e.newTx()
 
-	// Burn earned POINT; if some were already redeemed, deduct their value from the refund.
-	claw := min(u.Points, h.PointsEarned)
+	// Burn earned POINT; if some were already spent, deduct their value from the refund.
+	// Refunds are in USDC.inj, also for payments made with ATOM.
+	claw := min(u.Points[m.ID], h.PointsEarned)
 	short := h.PointsEarned - claw
 	refund := max(0, h.PaidUSDC-short*PointValue)
 
-	u.Points += h.PointsUsed - claw
+	u.Points[m.ID] += h.PointsUsed - claw
 	u.USDC += refund
 	u.Session.SpentToday = max(0, u.Session.SpentToday-h.PaidUSDC)
-	e.pool.Balance += h.PointsUsed*PointValue - h.PoolFee + short*PointValue
-	e.pool.FeesIn -= h.PoolFee
-	e.stats.OperatorFees -= h.Fee - h.PoolFee
-	e.pool.DiscountOut -= h.PointsUsed * PointValue
-	m.Received -= h.Amount - h.Fee
+	m.Received -= refund
+	m.Discounts -= h.PointsUsed * PointValue
 	m.Refunds++
 	e.stats.Refunds++
 	e.stats.Refunded += refund
@@ -334,11 +355,11 @@ func (e *Engine) Refund(req RefundRequest) error {
 
 	note := fmt.Sprintf("%d P returned · %d P earned removed", h.PointsUsed, claw)
 	if short > 0 {
-		note += fmt.Sprintf(" · %d P already redeemed, -$%s from refund", short, FormatUSDC(short*PointValue))
+		note += fmt.Sprintf(" · %d P already spent, -$%s from refund", short, FormatUSDC(short*PointValue))
 	}
 	e.addHistory(u, &HistoryEntry{Type: "REFUND", Status: "DONE", Credit: true, Desc: "Refund · " + m.Name, Note: note, Delta: "+" + FormatUSDC(refund) + " " + PayCurrency})
 	e.log("ok", m.ID+" (merchant key)", "Vault.RefundPayment", fmt.Sprintf(
-		"%s · %s · merchant returns $%s · pool returns fee $%s · Vault +%s · POINT +%d -%d",
-		u.Name, h.OrderID, FormatUSDC(h.Amount-h.Fee), FormatUSDC(h.Fee), FormatUSDC(refund), h.PointsUsed, claw))
+		"%s · %s · merchant returns $%s · Vault +%s · %s POINT +%d -%d",
+		u.Name, h.OrderID, FormatUSDC(refund), FormatUSDC(refund), m.ID, h.PointsUsed, claw))
 	return nil
 }

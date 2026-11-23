@@ -39,18 +39,24 @@ func (e *Engine) seedSample() {
 	}
 	type sample struct {
 		area     string
+		points   int64 // earned earlier at the store in the user's area
 		avg      int64
 		perWeek  int64
 		holdings map[string]int64
 	}
 	samples := []sample{
-		{"Seongsu", 6_500_000, 6, map[string]int64{"injective-1": 0, "8453": 120 * Micro, "1": 40 * Micro, "solana": 0}},
-		{"Euljiro", 14 * Micro, 3, map[string]int64{"injective-1": 50 * Micro, "8453": 0, "1": 200 * Micro, "solana": 0}},
-		{"Yeonnam", 9 * Micro, 4, map[string]int64{"injective-1": 0, "8453": 0, "1": 10 * Micro, "solana": 80 * Micro}},
+		{"Seongsu", 1200, 6_500_000, 6, map[string]int64{"injective-1": 0, "8453": 120 * Micro, "1": 40 * Micro, "solana": 0, "cosmoshub-4": 30 * Micro}},
+		{"Euljiro", 80, 14 * Micro, 3, map[string]int64{"injective-1": 50 * Micro, "8453": 0, "1": 200 * Micro, "solana": 0, "cosmoshub-4": 0}},
+		{"Yeonnam", 3400, 9 * Micro, 4, map[string]int64{"injective-1": 0, "8453": 0, "1": 10 * Micro, "solana": 80 * Micro, "cosmoshub-4": 60 * Micro}},
 	}
 	for i, u := range e.users {
 		s := samples[i%len(samples)]
 		u.Area, u.Profile, u.Holdings = s.area, Profile{AvgOrder: s.avg, PerWeek: s.perWeek}, s.holdings
+		for _, m := range e.merchants {
+			if m.Area == u.Area && m.Status == StatusActive {
+				u.Points[m.ID] = s.points
+			}
+		}
 	}
 }
 
@@ -60,9 +66,7 @@ type AdviceItem struct {
 	Title      string `json:"title"`
 	Detail     string `json:"detail"`
 	Reason     string `json:"reason"`
-	Action     string `json:"action,omitempty"` // redeem, topup
-	Points     int64  `json:"points,omitempty"`
-	Target     Asset  `json:"target,omitempty"`
+	Action     string `json:"action,omitempty"` // topup
 	Amount     int64  `json:"amount_micro,omitempty"`
 	Chain      string `json:"chain,omitempty"`
 	MerchantID string `json:"merchant_id,omitempty"`
@@ -76,19 +80,22 @@ type Advice struct {
 }
 
 type adviceFacts struct {
-	Points        int64              `json:"points"`
+	Points        []storePoints      `json:"points_by_store"`
 	PointValueUSD float64            `json:"point_value_usd"`
-	SuggestAt     int64              `json:"suggest_redeem_at_points"`
 	BalanceUSD    float64            `json:"balance_usd"`
 	AvgOrderUSD   float64            `json:"avg_order_usd"`
 	OrdersPerWeek int64              `json:"orders_per_week"`
 	Area          string             `json:"area"`
-	HoldingsUSD   map[string]float64 `json:"wallet_usdc_by_chain"`
+	HoldingsUSD   map[string]float64 `json:"wallet_usd_by_chain"` // ATOM on cosmoshub-4 at its USD value
 	RouteFeeBps   map[string]int64   `json:"topup_fee_bps_by_chain"`
 	ChainNames    map[string]string  `json:"chain_names"`
-	RedeemValues  map[Asset]float64  `json:"redeem_all_points_net_usd"`
 	Promos        []promoFact        `json:"promos_today"`
 	NowKST        string             `json:"now_kst"`
+}
+
+type storePoints struct {
+	Name   string `json:"name"`
+	Points int64  `json:"points"`
 }
 
 type promoFact struct {
@@ -101,12 +108,6 @@ type promoFact struct {
 }
 
 type adviceDecision struct {
-	Points struct {
-		Keep   int64  `json:"keep"`
-		Redeem int64  `json:"redeem"`
-		Target string `json:"target"`
-		Reason string `json:"reason"`
-	} `json:"points"`
 	Topup struct {
 		Needed    bool    `json:"needed"`
 		AmountUSD float64 `json:"amount_usd"`
@@ -160,19 +161,21 @@ func (e *Engine) Advise(req DisconnectRequest) (*Advice, error) {
 
 func (e *Engine) facts(u *User) adviceFacts {
 	f := adviceFacts{
-		Points: u.Points, PointValueUSD: 0.01, SuggestAt: u.Policy.Threshold,
-		BalanceUSD: float64(u.USDC) / float64(Micro), AvgOrderUSD: float64(u.Profile.AvgOrder) / float64(Micro),
+		PointValueUSD: 0.01,
+		BalanceUSD:    (float64(u.USDC) + float64(u.ATOM)*e.atomUSD()) / float64(Micro), AvgOrderUSD: float64(u.Profile.AvgOrder) / float64(Micro),
 		OrdersPerWeek: u.Profile.PerWeek, Area: u.Area,
 		HoldingsUSD: map[string]float64{}, RouteFeeBps: map[string]int64{}, ChainNames: map[string]string{},
-		RedeemValues: map[Asset]float64{}, NowKST: e.now().In(kst).Format("15:04"),
+		NowKST: e.now().In(kst).Format("15:04"),
 	}
 	for id, r := range topupChains {
 		f.HoldingsUSD[id] = float64(u.Holdings[id]) / float64(Micro)
 		f.RouteFeeBps[id] = r.FeeBps
 		f.ChainNames[id] = r.Name
 	}
-	for _, a := range Assets {
-		f.RedeemValues[a] = float64(e.quote(u.Points, a).Net) / float64(Micro)
+	for _, m := range e.merchants {
+		if p := u.Points[m.ID]; p > 0 {
+			f.Points = append(f.Points, storePoints{Name: m.Name, Points: p})
+		}
 	}
 	now := minuteOfDay(e.now())
 	for _, m := range e.merchants {
@@ -188,17 +191,10 @@ func (e *Engine) facts(u *User) adviceFacts {
 	return f
 }
 
-// ruleDecision is the deterministic baseline: keep points for two orders, top up to
-// a week of spending from the cheapest chain that covers it, and pick the best happy hour.
+// ruleDecision is the deterministic baseline: top up to a week of spending from the
+// cheapest chain that covers it, and pick the best happy hour.
 func ruleDecision(f adviceFacts) adviceDecision {
 	var d adviceDecision
-	keep := min(f.Points, int64(f.AvgOrderUSD*2/f.PointValueUSD))
-	if f.Points < f.SuggestAt {
-		keep = f.Points
-	}
-	d.Points.Keep, d.Points.Redeem, d.Points.Target = keep, f.Points-keep, "ATOM"
-	d.Points.Reason = fmt.Sprintf("Keeps a discount for your next 2 orders (avg $%.2f); ATOM gives the most reward per point today.", f.AvgOrderUSD)
-
 	weekly := f.AvgOrderUSD * float64(f.OrdersPerWeek)
 	if f.BalanceUSD < weekly {
 		need := float64(int((weekly-f.BalanceUSD)/10)+1) * 10
@@ -247,13 +243,6 @@ func ruleDecision(f adviceFacts) adviceDecision {
 }
 
 func validDecision(d adviceDecision, f adviceFacts) error {
-	p := d.Points
-	if p.Keep < 0 || p.Redeem < 0 || p.Keep+p.Redeem != f.Points {
-		return fmt.Errorf("keep + redeem must equal %d points", f.Points)
-	}
-	if p.Redeem > 0 && !validAsset(Asset(p.Target)) {
-		return fmt.Errorf("unknown target %q", p.Target)
-	}
 	if d.Topup.Needed {
 		if _, ok := f.RouteFeeBps[d.Topup.Chain]; !ok {
 			return fmt.Errorf("unknown chain %q", d.Topup.Chain)
@@ -270,17 +259,14 @@ func validDecision(d adviceDecision, f adviceFacts) error {
 
 func decisionItems(d adviceDecision, f adviceFacts, names map[string]string) []AdviceItem {
 	var items []AdviceItem
-	pt := AdviceItem{Kind: "points", Reason: d.Points.Reason}
-	if d.Points.Redeem > 0 {
-		t := Asset(d.Points.Target)
-		pt.Title = fmt.Sprintf("Keep %d points, redeem %d to %s", d.Points.Keep, d.Points.Redeem, assetLabel[t])
-		pt.Detail = fmt.Sprintf("%d points is worth about $%.2f as %s.", d.Points.Redeem, f.RedeemValues[t]*float64(d.Points.Redeem)/float64(max(f.Points, 1)), assetLabel[t])
-		pt.Action, pt.Points, pt.Target = "redeem", d.Points.Redeem, t
-	} else {
-		pt.Title = fmt.Sprintf("Keep your %d points", f.Points)
-		pt.Detail = fmt.Sprintf("Worth $%.2f off your next orders.", float64(f.Points)*f.PointValueUSD)
+	if len(f.Points) > 0 {
+		top := slices.MaxFunc(f.Points, func(a, b storePoints) int { return int(a.Points - b.Points) })
+		items = append(items, AdviceItem{
+			Kind: "points", Title: fmt.Sprintf("$%.2f off at %s", float64(top.Points)*f.PointValueUSD, top.Name),
+			Detail: fmt.Sprintf("%d points, usable on your next order there.", top.Points),
+			Reason: "Points work only at the store that gave them.",
+		})
 	}
-	items = append(items, pt)
 
 	tu := AdviceItem{Kind: "topup", Reason: d.Topup.Reason}
 	if d.Topup.Needed {
@@ -316,23 +302,14 @@ func decisionItems(d adviceDecision, f adviceFacts, names map[string]string) []A
 
 const advisorSystem = `You are the advisor inside a payment app. You only advise; the user decides and executes.
 Given facts about one user, decide:
-1. points: how many points to keep for discounts on upcoming orders and how many to suggest redeeming, and to which asset. keep + redeem must equal the user's points. Suggest redeeming only if points >= suggest_redeem_at_points; otherwise redeem 0. Prefer the asset with the highest net value.
-2. topup: whether the balance is likely to run short within a week of usual orders, and if so how much (whole dollars, at most 500) and from which chain id. Pick a chain where the wallet holds at least the amount, preferring the lowest fee.
-3. promo: one merchant_id from promos_today worth visiting (prefer active now and the same area), or "" if none.
-Do not predict prices. Never suggest buying or holding an asset for gains, and never mention returns or price movements; describe only payment discounts and the reward value at the time of redemption. Each reason is one short sentence a customer understands, using numbers from the facts.`
+1. topup: whether the balance is likely to run short within a week of usual orders, and if so how much (whole dollars, at most 500) and from which chain id. Pick a chain where the wallet holds at least the amount, preferring the lowest fee.
+2. promo: one merchant_id from promos_today worth visiting (prefer active now and the same area), or "" if none.
+Points are discounts usable only at the store that gave them. Do not predict prices. Never suggest buying or holding an asset for gains, and never mention returns or price movements. Each reason is at most 12 words a customer understands, using numbers from the facts.`
 
 var adviceSchema = map[string]any{
 	"type": "object", "additionalProperties": false,
-	"required": []string{"points", "topup", "promo"},
+	"required": []string{"topup", "promo"},
 	"properties": map[string]any{
-		"points": map[string]any{
-			"type": "object", "additionalProperties": false, "required": []string{"keep", "redeem", "target", "reason"},
-			"properties": map[string]any{
-				"keep": map[string]any{"type": "integer"}, "redeem": map[string]any{"type": "integer"},
-				"target": map[string]any{"type": "string", "enum": []string{"ATOM", "USDC_INJ"}},
-				"reason": map[string]any{"type": "string"},
-			},
-		},
 		"topup": map[string]any{
 			"type": "object", "additionalProperties": false, "required": []string{"needed", "amount_usd", "chain", "reason"},
 			"properties": map[string]any{
@@ -391,14 +368,4 @@ func claudeJSON(model, system string, facts any, schema map[string]any, out any)
 		}
 	}
 	return fmt.Errorf("empty reply")
-}
-
-func agentModel() (string, bool) {
-	if os.Getenv("ANTHROPIC_API_KEY") == "" {
-		return "", false
-	}
-	if m := os.Getenv("AGENT_MODEL"); m != "" {
-		return m, true
-	}
-	return "claude-opus-5-5", true
 }

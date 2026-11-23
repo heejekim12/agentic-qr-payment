@@ -21,7 +21,17 @@ func quoteTopup(chain string, amount float64) (TopupQuote, error) {
 	return TopupQuote{Chain: chain, Name: r.Name, Denom: r.Denom, Amount: amt, Fee: fee, Out: amt - fee}, nil
 }
 
-// QuoteTopup mirrors SkipClient.route() for USDC -> USDC.inj.
+// quoteTopupLocked adds the ATOM amount for Cosmos Hub top-ups; caller holds e.mu.
+func (e *Engine) quoteTopupLocked(chain string, amount float64) (TopupQuote, error) {
+	q, err := quoteTopup(chain, amount)
+	if err == nil && q.Denom == "ATOM" {
+		q.AtomUSD = e.atomUSD()
+		q.AtomOut = int64(float64(q.Out) / q.AtomUSD)
+	}
+	return q, err
+}
+
+// QuoteTopup mirrors SkipClient.route(): USDC -> USDC.inj, or ATOM over IBC; amounts are in USD.
 func (e *Engine) QuoteTopup(req TopupRequest) (TopupQuote, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -29,7 +39,7 @@ func (e *Engine) QuoteTopup(req TopupRequest) (TopupQuote, error) {
 	if err != nil {
 		return TopupQuote{}, err
 	}
-	q, err := quoteTopup(req.Chain, req.Amount)
+	q, err := e.quoteTopupLocked(req.Chain, req.Amount)
 	if err != nil {
 		return q, err
 	}
@@ -44,7 +54,7 @@ func (e *Engine) Topup(req TopupRequest) (TopupQuote, error) {
 	if err != nil {
 		return TopupQuote{}, err
 	}
-	q, err := quoteTopup(req.Chain, req.Amount)
+	q, err := e.quoteTopupLocked(req.Chain, req.Amount)
 	if err != nil {
 		return q, err
 	}
@@ -53,17 +63,24 @@ func (e *Engine) Topup(req TopupRequest) (TopupQuote, error) {
 	}
 	e.newTx()
 	u.Holdings[q.Chain] -= q.Amount
-	u.USDC += q.Out
 	e.stats.TopUps++
 	e.stats.TopUpVolume += q.Out
+	if q.Denom == "ATOM" {
+		u.ATOM += q.AtomOut
+		e.addHistory(u, &HistoryEntry{Type: "TOPUP", Status: "DONE", Credit: true, Desc: "ATOM on Cosmos Hub via Skip:Go", Delta: "+" + FormatAtom(q.AtomOut) + " ATOM"})
+		e.log("skip", u.Name+" wallet", "SkipClient.executeRoute()", fmt.Sprintf("signed on Cosmos Hub (cosmoshub-4); IBC ATOM to injective-1, post-route action Vault.DepositAtom for %s", u.Addr))
+		e.log("ok", "Skip:Go relayer", "Vault.DepositAtom", fmt.Sprintf("%s Vault +%s ATOM", u.Name, FormatAtom(q.AtomOut)))
+		return q, nil
+	}
+	u.USDC += q.Out
 	if q.Chain == "injective-1" {
 		e.addHistory(u, &HistoryEntry{Type: "TOPUP", Status: "DONE", Credit: true, Desc: "From Injective wallet", Delta: "+" + FormatUSDC(q.Out) + " " + PayCurrency})
 		e.log("ok", u.Addr+" (wallet)", "Vault.DepositUsdc", fmt.Sprintf("%s Vault +%s USDC (direct deposit)", u.Name, FormatUSDC(q.Out)))
 		return q, nil
 	}
-	e.addHistory(u, &HistoryEntry{Type: "TOPUP", Status: "DONE", Credit: true, Desc: "USDC on " + q.Name + " via Skip:Go", Delta: "+" + FormatUSDC(q.Out) + " " + PayCurrency})
+	e.addHistory(u, &HistoryEntry{Type: "TOPUP", Status: "DONE", Credit: true, Desc: q.Denom + " on " + q.Name + " via Skip:Go", Delta: "+" + FormatUSDC(q.Out) + " " + PayCurrency})
 	e.log("skip", u.Name+" wallet", "SkipClient.executeRoute()", fmt.Sprintf("signed on %s (%s); post-route action Vault.DepositUsdc for %s", q.Name, q.Chain, u.Addr))
-	e.log("ok", "Skip:Go relayer", "Vault.DepositUsdc", fmt.Sprintf("%s Vault +%s USDC", u.Name, FormatUSDC(q.Out)))
+	e.log("ok", "Skip:Go relayer", "Vault.DepositUsdc", fmt.Sprintf("%s Vault +%s USDC.inj (from %s)", u.Name, FormatUSDC(q.Out), q.Denom))
 	return q, nil
 }
 
@@ -77,10 +94,11 @@ func walletCovers(u *User, q TopupQuote) error {
 
 type WithdrawRequest struct {
 	User   int     `json:"user"`
-	Amount float64 `json:"amount_usdc"`
+	Asset  string  `json:"asset"`       // USDC_INJ (default) or ATOM
+	Amount float64 `json:"amount_usdc"` // in units of the asset
 }
 
-// Withdraw is owner-signed only; session keys and pool pause cannot affect it.
+// Withdraw is owner-signed only; session keys cannot affect it.
 func (e *Engine) Withdraw(req WithdrawRequest) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -91,6 +109,19 @@ func (e *Engine) Withdraw(req WithdrawRequest) error {
 	amt, err := toMicro(req.Amount)
 	if err != nil {
 		return err
+	}
+	if req.Asset == PayATOM {
+		if amt > u.ATOM {
+			return errf("ERR_INSUFFICIENT_VAULT", "Vault balance is %s ATOM", FormatAtom(u.ATOM))
+		}
+		e.newTx()
+		u.ATOM -= amt
+		e.addHistory(u, &HistoryEntry{Type: "WITHDRAW", Status: "DONE", Desc: "Vault -> " + u.Addr, Delta: "-" + FormatAtom(amt) + " ATOM"})
+		e.log("ok", u.Addr+" (wallet)", "Vault.Withdraw", fmt.Sprintf("%s · %s ATOM -> owner. Session keys cannot call this.", u.Name, FormatAtom(amt)))
+		return nil
+	}
+	if req.Asset != "" && req.Asset != PayUSDC {
+		return errf("ERR_BAD_ASSET", "asset must be USDC_INJ or ATOM")
 	}
 	if amt > u.USDC {
 		return errf("ERR_INSUFFICIENT_VAULT", "Vault balance is %s USDC.inj", FormatUSDC(u.USDC))
@@ -127,10 +158,9 @@ func (e *Engine) SetSession(req SessionRequest) error {
 }
 
 type PolicyRequest struct {
-	User      int     `json:"user"`
-	PerTx     float64 `json:"per_tx_usdc"`
-	Daily     float64 `json:"daily_usdc"`
-	Threshold int64   `json:"threshold"`
+	User  int     `json:"user"`
+	PerTx float64 `json:"per_tx_usdc"`
+	Daily float64 `json:"daily_usdc"`
 }
 
 func (e *Engine) SetPolicy(req PolicyRequest) error {
@@ -139,9 +169,6 @@ func (e *Engine) SetPolicy(req PolicyRequest) error {
 	u, err := e.user(req.User)
 	if err != nil {
 		return err
-	}
-	if req.Threshold < 1 {
-		return errf("ERR_BAD_POLICY", "threshold must be at least 1 POINT")
 	}
 	perTx, err := toMicro(req.PerTx)
 	if err != nil {
@@ -159,7 +186,5 @@ func (e *Engine) SetPolicy(req PolicyRequest) error {
 		e.newTx()
 		e.log("ok", u.Addr+" (wallet)", "Vault.RegisterSession", fmt.Sprintf("%s session limits $%s/tx · $%s/day", u.Name, FormatUSDC(perTx), FormatUSDC(daily)))
 	}
-	u.Policy = Policy{Threshold: req.Threshold}
-	e.log("ok", u.Addr, "PUT /api/v1/agent/policy (off-chain)", fmt.Sprintf("suggest redeeming at %d P", req.Threshold))
 	return nil
 }

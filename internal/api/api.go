@@ -7,7 +7,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"strconv"
 
 	"agentic-qr-payment/internal/engine"
 )
@@ -24,11 +23,6 @@ func Register(mux *http.ServeMux, e *engine.Engine) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write(b)
 	})
-	mux.HandleFunc("GET /api/redeem/quote", func(w http.ResponseWriter, r *http.Request) {
-		p, _ := strconv.ParseInt(r.URL.Query().Get("points"), 10, 64)
-		writeJSON(w, http.StatusOK, e.QuoteRedeem(p))
-	})
-
 	mux.Handle("POST /api/topup/quote", handle(e.QuoteTopup))
 	mux.Handle("POST /api/topup", handle(e.Topup))
 	mux.Handle("POST /api/withdraw", handle(noResult(e.Withdraw)))
@@ -42,10 +36,7 @@ func Register(mux *http.ServeMux, e *engine.Engine) {
 	mux.Handle("POST /api/pay/preview", handle(e.PreviewPay))
 	mux.Handle("POST /api/pay", handle(e.Pay))
 	mux.Handle("POST /api/refund", handle(noResult(e.Refund)))
-	mux.Handle("POST /api/redeem", handle(e.Redeem))
 	mux.Handle("POST /api/merchants/status", handle(noResult(e.ToggleMerchant)))
-	mux.Handle("POST /api/pool/fund", handle(noResult(func(struct{}) error { return e.FundPool() })))
-	mux.Handle("POST /api/pool/pause", handle(noResult(func(struct{}) error { return e.TogglePause() })))
 }
 
 func noResult[T any](fn func(T) error) func(T) (any, error) {

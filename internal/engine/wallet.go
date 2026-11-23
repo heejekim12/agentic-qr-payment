@@ -7,11 +7,10 @@ import (
 )
 
 type WalletRequest struct {
-	User       int    `json:"user"`
-	Wallet     string `json:"wallet"`      // keplr or metamask
-	Addr       string `json:"addr"`        // keplr: inj1 address
-	CosmosAddr string `json:"cosmos_addr"` // keplr: cosmos1 address
-	EthAddr    string `json:"eth_addr"`    // metamask: 0x address
+	User    int    `json:"user"`
+	Wallet  string `json:"wallet"`   // keplr or metamask
+	Addr    string `json:"addr"`     // keplr: inj1 address
+	EthAddr string `json:"eth_addr"` // metamask: 0x address
 }
 
 // ConnectWallet replaces the demo addresses with the wallet's addresses.
@@ -23,29 +22,24 @@ func (e *Engine) ConnectWallet(req WalletRequest) error {
 	if err != nil {
 		return err
 	}
-	var label, note string
+	var label string
 	switch req.Wallet {
 	case "keplr":
 		if !validBech32(req.Addr, "inj") {
 			return errf("ERR_BAD_ADDRESS", "addr must be a valid inj1 address")
 		}
-		if !validBech32(req.CosmosAddr, "cosmos") {
-			return errf("ERR_BAD_ADDRESS", "cosmos_addr must be a valid cosmos1 address")
-		}
-		u.Addr, u.CosmosAddr, label = req.Addr, req.CosmosAddr, "Keplr"
+		u.Addr, label = req.Addr, "Keplr"
 	case "metamask":
 		inj, ok := injFromEth(req.EthAddr)
 		if !ok {
 			return errf("ERR_BAD_ADDRESS", "eth_addr must be a 0x address with 40 hex characters")
 		}
-		// MetaMask has no Cosmos Hub key, so the ATOM destination stays the demo cosmos1 address.
-		u.Addr, u.CosmosAddr, label = inj, u.demoCosmos, "MetaMask"
-		note = " ATOM still goes to the demo cosmos1 address."
+		u.Addr, label = inj, "MetaMask"
 	default:
 		return errf("ERR_UNSUPPORTED_WALLET", "wallet must be keplr or metamask")
 	}
 	u.Wallet = req.Wallet
-	e.log("ok", u.Addr+" ("+label+")", "wallet connect", fmt.Sprintf("%s now uses %s. Address only, no signature requested.%s", u.Name, u.Addr, note))
+	e.log("ok", u.Addr+" ("+label+")", "wallet connect", fmt.Sprintf("%s now uses %s. Address only, no signature requested.", u.Name, u.Addr))
 	return nil
 }
 
@@ -60,7 +54,7 @@ func (e *Engine) DisconnectWallet(req DisconnectRequest) error {
 	if err != nil {
 		return err
 	}
-	u.Addr, u.CosmosAddr, u.Wallet = u.demoAddr, u.demoCosmos, ""
+	u.Addr, u.Wallet = u.demoAddr, ""
 	e.log("sec", u.Addr, "wallet disconnect", u.Name+" back to the demo address")
 	return nil
 }
