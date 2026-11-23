@@ -169,6 +169,7 @@ header.top .sub { color: var(--muted); margin: 2px 0 0; }
 .opt.sel { border-color: var(--accent); background: var(--accent-soft); }
 .opt input { width: auto; accent-color: var(--accent); margin: 0; }
 .opt .t { font-weight: 600; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.opt .v .more { font-size: 11.5px; color: var(--ok); font-family: var(--f-body); white-space: nowrap; }
 .opt .v { text-align: right; display: flex; flex-direction: column; font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
 .g2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .g3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
@@ -488,7 +489,7 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
   const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const hhmm = t => new Date(t).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
   const short = a => a && a.length > 18 ? a.slice(0, 10) + "…" + a.slice(-6) : a;
-  const friendly = e => (e && FRIENDLY[e.code]) || (e && e.message) || String(e);
+  const friendly = e => (e && FRIENDLY[e.code]) || (e instanceof TypeError ? "Can't reach the demo server. Start it with go run ./cmd/server and reload." : (e && e.message) || String(e));
   const showErr = (id, e) => { const el = $(id); el.textContent = e ? friendly(e) : ""; el.hidden = !e; };
   const amt = (asset, v) => v.toFixed(asset === "USDC_INJ" ? 2 : 4);
   const txLink = (h, label = "View transaction") => /^[0-9A-F]{64}$/.test(h || "") ? `<a class="tx" href="${MINTSCAN}${h}" target="_blank" rel="noopener">${label} ↗</a>` : "";
@@ -748,12 +749,19 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
     const u = U();
     const p = Math.max(0, Math.floor(Number($("rd-pt").value) || 0));
     $("rd-avail").textContent = `${fmtP(u.points)} available`;
-    const rows = await api("GET", "/api/redeem/quote?points=" + p);
+    let rows;
+    try { rows = await api("GET", "/api/redeem/quote?points=" + p); }
+    catch (e) { $("rd-opts").innerHTML = `<div class="alert">${esc(friendly(e))}</div>`; $("rd-go").disabled = true; return; }
     const dest = { ATOM: "to your Cosmos Hub wallet", INJ: "to your Injective wallet", USDC_INJ: "to your balance, +1% points next payment" };
-    $("rd-opts").innerHTML = rows.map(q => `<label class="opt ${q.asset === redeemTarget ? "sel" : ""}">
+    const base = (rows.find(q => q.asset === "USDC_INJ") || {}).net_micro || 0;
+    $("rd-opts").innerHTML = rows.map(q => {
+      const bonus = q.boost_bps ? `<span class="pill acc">+${q.boost_bps / 100}% bonus</span>` : "";
+      const more = base && q.net_micro > base ? `<span class="more">+${((q.net_micro / base - 1) * 100).toFixed(1)}% vs USDC.inj</span>` : "";
+      return `<label class="opt ${q.asset === redeemTarget ? "sel" : ""}">
       <input type="radio" name="rd" value="${q.asset}" ${q.asset === redeemTarget ? "checked" : ""}>
-      <div><div class="t">${esc(q.label)} ${q.best ? '<span class="pill ok">Best value</span>' : ""}</div><p class="note">${dest[q.asset]}</p></div>
-      <div class="v"><b>${amt(q.asset, q.amount)}</b><span class="note">$${(q.net_micro / MICRO).toFixed(2)}</span></div></label>`).join("");
+      <div><div class="t">${esc(q.label)} ${bonus} ${q.best ? '<span class="pill ok">Best value</span>' : ""}</div><p class="note">${dest[q.asset]}</p></div>
+      <div class="v"><b>${amt(q.asset, q.amount)}</b><span class="note">$${(q.net_micro / MICRO).toFixed(2)}</span>${more}</div></label>`;
+    }).join("");
     $("rd-opts").querySelectorAll("input").forEach(r => r.onchange = () => { redeemTarget = r.value; renderRedeem(); });
     const sel = rows.find(q => q.asset === redeemTarget);
     $("rd-go").disabled = !(p > 0 && p <= u.points);
