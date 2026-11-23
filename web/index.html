@@ -58,6 +58,9 @@ a { color: var(--accent); }
 header.top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 24px; margin-bottom: 14px; }
 header.top h1 { font-size: 24px; font-weight: 600; letter-spacing: -.01em; }
 header.top .sub { color: var(--muted); margin: 2px 0 0; }
+.hdr-r { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.nc { font-family: var(--f-mono); font-size: 11px; color: var(--ok); border: 1px solid var(--ok); border-radius: 6px; padding: 3px 8px; }
+.nc-in { color: var(--ok); }
 .sim { font-family: var(--f-mono); font-size: 11px; color: var(--warn); border: 1px solid var(--warn); border-radius: 6px; padding: 3px 8px; }
 .demo-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; background: var(--panel); border: 1px dashed var(--line); border-radius: 14px; padding: 10px 14px; margin-bottom: 18px; }
 .demo-bar .lbl { font-family: var(--f-mono); font-size: 11px; color: var(--warn); letter-spacing: .06em; }
@@ -237,7 +240,7 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
       <h1>Agentic QR Payment</h1>
       <p class="sub">Pay approved cafes and restaurants from your own balance, earn points, and turn them into ATOM.</p>
     </div>
-    <span class="sim">SIMULATION · NO ON-CHAIN TX</span>
+    <div class="hdr-r"><span class="nc">NON-CUSTODIAL</span><span class="sim">SIMULATION · NO ON-CHAIN TX</span></div>
   </header>
 
   <div class="demo-bar" aria-label="Demo controls">
@@ -275,7 +278,7 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
         <div class="screen" id="v-home">
           <div class="balance">
             <div>
-              <div class="lbl">Balance</div>
+              <div class="lbl">Balance · <span class="nc-in">non-custodial</span>, only you can withdraw</div>
               <div class="big" id="bal-usdc">$0.00</div>
               <div class="note" id="bal-assets"></div>
             </div>

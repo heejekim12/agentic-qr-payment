@@ -1,13 +1,33 @@
 # agentic-qr-payment
 
-Demo of a non-custodial prepaid QR payment and point reward program on Injective.
+**Non-custodial.** Prepay USDC into a vault only you can withdraw from, then pay approved cafes and restaurants by QR with no wallet popup and no gas fee, and earn points. An AI agent suggests how many points to keep or redeem and when to top up; you make every move yourself.
 
-Users deposit USDC into their own Prepaid Vault, pay whitelisted cafes and restaurants by QR without a wallet popup, earn soulbound POINT, and redeem POINT for ATOM, USDC.inj or INJ. An AI agent advises which points to keep or redeem, when to top up and from which chain, and which nearby store has a happy hour; the user makes every move. ATOM always returns more value per point than USDC.inj.
+## In short
 
-This repository is a working simulation. A Go server models the contracts in memory and serves a web UI. Skip:Go routes, prices and transaction hashes are simulated; nothing is sent on-chain.
+- **Top up:** USDC.inj on Injective goes straight in. USDC on Base, Ethereum or Solana is routed through [Skip:Go](https://go.skip.build/) into your own vault. The platform never holds your funds.
+- **Pay:** The app checks the store's signature on the QR before paying. A payment-only key you register once (with limits) signs for you, and the platform pays the gas, so there is no popup and no fee. Each payment uses your points as a discount and earns new points.
+- **Rewards:** You redeem points for ATOM, USDC.inj or INJ; ATOM is the best value with a +10% bonus. Rewards are paid from a pool funded by merchant fees, never from user balances. The AI agent suggests how many points to keep and redeem, how much to top up and from which chain, and which store nearby gives extra points during a quiet hour.
+
+This repository is a working demo. A Go server simulates the contracts in memory and serves the web UI. Skip:Go routes, prices and transaction hashes are simulated; nothing is sent on-chain.
+
+## Terms
+
+| Term | Meaning |
+| --- | --- |
+| Non-custodial | The platform never holds or controls user funds; only the owner can withdraw |
+| Vault | Your prepaid balance, held in a contract only you can withdraw from |
+| USDC.inj | USDC on Injective, the currency used for payments |
+| POINT | Reward points. 1 POINT = $0.01. They cannot be sent to other people |
+| Session key (Tap to pay) | A payment-only key registered once on your Vault. It can pay approved stores within per-payment and daily limits, and cannot withdraw |
+| Feegrant | A Cosmos SDK feature that lets the platform pay transaction fees for you |
+| Whitelist Registry | The list of approved stores and the keys that sign their QR codes |
+| Reward Pool | Money that pays for point discounts and redemptions, funded by merchant fees and sponsors |
+| Happy hour | A daily window when a store gives extra points and pays for them |
+| Agent | Gives suggestions only. It never moves funds or redeems points |
 
 ## Contents
 
+- [Terms](#terms)
 - [Goals](#goals)
 - [Architecture](#architecture)
 - [Contracts](#contracts)
@@ -74,7 +94,7 @@ flowchart TB
 | POINT | Non-transferable reward token; only minted on payment and burned on discount or redemption | `User.Points` in `internal/engine` |
 | Reward Pool | Funds POINT discounts and redemptions; receives merchant fees and sponsor budget | `internal/engine/rewards.go`, `admin.go` |
 | Session key | Key registered on the Vault with per-payment and daily limits, used for QR payments | `Session` in `internal/engine/types.go` |
-| Agent | Suggests a redemption after each payment; never redeems on its own | `runAgent` in `internal/engine/rewards.go` |
+| Agent | Advises on points, top-up and happy hours after each payment; never executes | `Advise` in `internal/engine/advisor.go` |
 | Web UI | Customer app, merchant POS and operator view | `web/index.html` |
 
 ## Contracts
@@ -180,7 +200,7 @@ Before paying, the app shows four checks from `/api/qr/verify`: store signature,
 
    ```
    fee       = A_usdc * fee_bps / 10000
-   P_earned  = floor(A * point_earn_bps / 10000 / 0.01)
+   P_earned  = floor(A * (point_earn_bps + extra_bps) / 10000 / 0.01)   # extra_bps only during a happy hour
 
    Vault           -A_usdc
    POINT           -P_used (burn), +P_earned (mint)
@@ -246,6 +266,7 @@ The operator view shows pool coverage: `pool balance / (outstanding POINT * 0.01
 | Merchant fee | Merchant | 1.5% (cafes), 2.0% (restaurant) of `A_usdc` | Reward Pool |
 | Top-up route fee (sample) | User | Ethereum 0.4%, Solana 0.2%, Base 0.1%, Injective 0% | Route |
 | Redeem route cost (sample) | Reward Pool | ATOM 0.6%, INJ 0.3% | Route |
+| Happy hour fee | Merchant | `extra_bps` of the order amount during the merchant's happy hour | Reward Pool (funds the extra POINT) |
 | Gas | Platform | Per transaction, via feegrant | Validators |
 
 With these settings, a $100 order paid in USDC brings $1.50 into the pool and mints 300 POINT ($3.00) of liability, so the pool needs outside funding.
@@ -364,7 +385,7 @@ Wallet connect reads addresses only. Balances stay simulated and no signature is
 | Withdraw | Owner-signed, not affected by session limits or a pool pause |
 | Session key | Grant, revoke, per-payment and daily limits; daily counters reset when the date changes |
 | Redeem | ATOM, INJ or USDC.inj with boost, daily cap and pool checks; ATOM marked as best value |
-| ATOM preference | ATOM +10%, INJ +5%, USDC.inj 0% with +1% earn on the next payment; boost changes rejected unless ATOM beats USDC.inj after route cost |
+| ATOM preference | ATOM +10%, INJ +5%, USDC.inj 0% with +1% earn on the next payment; boost changes rejected unless ATOM beats USDC.inj after route cost; the Redeem screen shows each bonus and the net gain over USDC.inj (for example ATOM +10% bonus, +9.3% vs USDC.inj) |
 | Agent | Advice on points to keep or redeem, top-up amount and cheapest chain, and a nearby happy hour; Claude when a key is set, rules otherwise; each suggestion opens a pre-filled screen and the user confirms |
 | Happy hour | Merchant-paid extra POINT during a daily window, shown on the POS, receipt and operator store table |
 | Operator | Reward Pool balance, coverage, inflow and outflow totals, daily redeem cap, budget top-up, pause, boost settings, merchant approve/suspend |
@@ -428,7 +449,7 @@ Demo path:
 
 ```
 cmd/server/        HTTP server entry point
-internal/engine/   Contract simulation: payment, refund, vault, rewards, wallet, admin
+internal/engine/   Contract simulation: payment, refund, vault, rewards, wallet, admin, advisor
 internal/api/      JSON HTTP handlers
 web/               Static UI (embedded into the binary)
 ```
