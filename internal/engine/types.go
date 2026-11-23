@@ -44,6 +44,7 @@ var topupChains = map[string]chainRoute{
 	"injective-1": {"Injective", "USDC.inj", 0},
 	"8453":        {"Base", "USDC", 10},
 	"1":           {"Ethereum", "USDC", 40},
+	"solana":      {"Solana", "USDC", 20},
 }
 
 const (

@@ -218,7 +218,7 @@ td.n, th.n { text-align: right; } td.n { font-family: var(--f-mono); }
 .err { color: var(--bad); font-size: 12.5px; margin: 0; }
 .log { display: flex; flex-direction: column; gap: 8px; max-height: 520px; overflow-y: auto; }
 .ev { border-left: 3px solid var(--line); padding: 4px 0 4px 10px; display: flex; flex-direction: column; gap: 2px; }
-.ev.ok { border-color: var(--ok); } .ev.bad { border-color: var(--bad); } .ev.skip { border-color: var(--accent); } .ev.pt { border-color: var(--pt); } .ev.sec { border-color: var(--warn); }
+.ev.ev-ok { border-color: var(--ok); } .ev.ev-bad { border-color: var(--bad); } .ev.ev-skip { border-color: var(--accent); } .ev.ev-pt { border-color: var(--pt); } .ev.ev-sec { border-color: var(--warn); }
 .ev .h { font-family: var(--f-mono); font-size: 11.5px; display: flex; gap: 8px; flex-wrap: wrap; }
 .ev .h .m, .ev .h .t { color: var(--muted); } .ev .h .t { margin-left: auto; }
 .ev .b { font-size: 12.5px; color: #c3ccd8; white-space: pre-line; overflow-wrap: anywhere; }
@@ -730,6 +730,7 @@ footer.foot a.cosmos { color: var(--fg); }
     { id: "injective-1", sym: "USDC.inj", on: "Injective - Cosmos" },
     { id: "8453", sym: "USDC", on: "Base" },
     { id: "1", sym: "USDC", on: "Ethereum" },
+    { id: "solana", sym: "USDC", on: "Solana" },
   ];
   let tuChain = SOURCES[0].id;
   const USDC_ICON = '<svg class="coin" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="16" fill="#2775ca"/><circle cx="16" cy="16" r="10.5" fill="none" stroke="#fff" stroke-width="1.6"/><text x="16" y="21" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="13" font-weight="700" fill="#fff">$</text></svg>';
@@ -969,7 +970,7 @@ footer.foot a.cosmos { color: var(--fg); }
       S.merchants.map(m => `<tr><td>${esc(m.name)}</td><td><button class="sm" data-m="${esc(m.merchant_id)}"><span class="pill ${m.status === "ACTIVE" ? "ok" : "bad"}">${m.status === "ACTIVE" ? "Approved" : "Suspended"}</span></button></td><td class="n">${(m.fee_bps / 100).toFixed(1)}%</td><td class="n">${(m.point_earn_bps / 100).toFixed(1)}%</td><td class="n">$${fmtU(m.received_micro)}</td></tr>`).join("") + `</tbody>`;
     $("wl").querySelectorAll("[data-m]").forEach(b => b.onclick = async () => { await api("POST", "/api/merchants/status", { merchant_id: b.dataset.m }).catch(() => {}); await refresh(); });
 
-    $("log").innerHTML = S.events.map(ev => `<div class="ev ${esc(ev.kind)}"><div class="h"><span>${esc(ev.msg)}</span><span class="m">${esc(ev.signer)}</span><span class="t">${hhmm(ev.time)}</span></div><div class="b">${esc(ev.body)}</div>${txLink(ev.tx_hash)}</div>`).join("");
+    $("log").innerHTML = S.events.filter(ev => ev.tx_hash).map(ev => `<div class="ev ev-${esc(ev.kind)}"><div class="h"><span>${esc(ev.msg)}</span><span class="m">${esc(ev.signer)}</span><span class="t">${hhmm(ev.time)}</span></div><div class="b">${esc(ev.body)}</div>${txLink(ev.tx_hash)}</div>`).join("");
   }
   $("rp-apply").onclick = async () => { await api("POST", "/api/pool/cap", { cap_usdc: Number($("rp-cap").value) }).catch(() => {}); await refresh(); };
   $("rp-fund").onclick = async () => { await api("POST", "/api/pool/fund", {}); await refresh(); };

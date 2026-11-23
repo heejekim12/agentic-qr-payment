@@ -32,11 +32,6 @@ func (e *Engine) QuoteTopup(req TopupRequest) (TopupQuote, error) {
 	if err != nil {
 		return q, err
 	}
-	if q.Chain == "injective-1" {
-		return q, nil // same-chain deposit, no Skip:Go route
-	}
-	e.log("skip", "client (browser)", "SkipClient.route()",
-		fmt.Sprintf("%s (%s) %s -> injective-1 USDC.inj · in %s · est. out %s", q.Name, q.Chain, q.Denom, FormatUSDC(q.Amount), FormatUSDC(q.Out)))
 	return q, nil
 }
 

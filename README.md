@@ -244,7 +244,7 @@ The operator view shows pool coverage: `pool balance / (outstanding POINT * 0.01
 | Fee | Payer | Rate | Goes to |
 | --- | --- | --- | --- |
 | Merchant fee | Merchant | 1.5% (cafes), 2.0% (restaurant) of `A_usdc` | Reward Pool |
-| Top-up route fee (sample) | User | Ethereum 0.4%, Base 0.1%, Injective 0% | Route |
+| Top-up route fee (sample) | User | Ethereum 0.4%, Solana 0.2%, Base 0.1%, Injective 0% | Route |
 | Redeem route cost (sample) | Reward Pool | ATOM 0.6%, INJ 0.3% | Route |
 | Gas | Platform | Per transaction, via feegrant | Validators |
 
@@ -317,7 +317,7 @@ After each payment:
 
 | Flow | Route | Simulated call |
 | --- | --- | --- |
-| Top up USDC on Base (8453) or Ethereum (1) | USDC -> injective-1 USDC.inj, then `Vault.DepositUsdc` as the post-route action | `SkipClient.route()`, `SkipClient.executeRoute()` |
+| Top up USDC on Base (8453), Ethereum (1) or Solana (`solana`) | USDC -> injective-1 USDC.inj, then `Vault.DepositUsdc` as the post-route action | `SkipClient.route()`, `SkipClient.executeRoute()` |
 | Top up USDC.inj on Injective (default) | Direct deposit, no route | `Vault.DepositUsdc` |
 | Redeem POINT to ATOM | injective-1 USDC -> cosmoshub-4 `uatom`, IBC transfer to the user's `cosmos1` address | `RewardPool.RedeemPoints` |
 | Redeem POINT to INJ | USDC -> INJ swap on injective-1 | `RewardPool.RedeemPoints` |
@@ -351,7 +351,7 @@ Wallet connect reads addresses only. Balances stay simulated and no signature is
 | Area | What works |
 | --- | --- |
 | Users | Three demo users, each with their own Vault balance, POINT, ATOM, INJ, session, policy and activity |
-| Top up | Quote and deposit of USDC.inj on Injective (default, direct) or USDC on Base or Ethereum (simulated Skip:Go route); Skip:Go-style asset picker |
+| Top up | Quote and deposit of USDC.inj on Injective (default, direct) or USDC on Base, Ethereum or Solana (simulated Skip:Go route); Skip:Go-style asset picker |
 | Payment | Merchant QR (MPM v2.0) with ed25519 signature, 120 s expiry and one-time `order_id`; preview before paying; POINT-first discount; fee to the Reward Pool; POINT minted in the same transaction |
 | QR authentication | Four checks shown in the app; a forged QR (amount changed) fails the signature check and is rejected |
 | Rejections | Forged QR, suspended merchant, expired QR, reused order, session per-payment and daily limits, insufficient Vault balance, insufficient Reward Pool |
@@ -452,7 +452,7 @@ Sample data is defined in `internal/engine`:
 | --- | --- |
 | `price` (`types.go`) | Sample USD prices for ATOM, INJ and USDC.inj |
 | `routeFeeBps` (`types.go`) | Sample swap and IBC cost per target asset |
-| `topupChains` (`types.go`) | Top-up sources (USDC.inj on injective-1, USDC on Base and Ethereum) and route fees |
+| `topupChains` (`types.go`) | Top-up sources (USDC.inj on injective-1, USDC on Base, Ethereum and Solana) and route fees |
 | `merchants` (`engine.go`) | Registry entries: status, `fee_bps`, `point_earn_bps`, settlement address |
 | `newUser(...)` calls (`engine.go`) | Demo users, starting Vault balance and POINT |
 | `pool` (`engine.go`) | Starting Reward Pool balance, daily redeem cap and feegrant gas pool |
