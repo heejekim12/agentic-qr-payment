@@ -34,7 +34,7 @@ func (e *Engine) CreateQR(req QRRequest) (*QR, error) {
 	e.seq++
 	now := e.now()
 	q := &QR{
-		Version: "2.0", MerchantID: m.ID, Currency: "USDC.inj",
+		Version: "2.0", MerchantID: m.ID, Currency: PayCurrency,
 		OrderID:    fmt.Sprintf("ORD_%s_%04d", now.Format("20060102"), e.seq),
 		AmountUSDC: FormatUSDC(amt), ExpiresAt: now.Add(QRTTL).Unix(),
 	}
@@ -111,10 +111,11 @@ func (e *Engine) VerifyQR(req VerifyRequest) (*QRVerification, error) {
 	v := &QRVerification{Checks: []QRCheck{
 		{Name: "Store signature", OK: sigOK, Detail: sigDetail},
 		{Name: "Approved store", OK: active, Detail: activeDetail},
+		{Name: "Pays in " + PayCurrency, OK: q.Currency == PayCurrency, Detail: "Currency in QR: " + q.Currency},
 		{Name: "Not expired", OK: left > 0, Detail: expDetail},
 		{Name: "Order not paid yet", OK: !paid, Detail: orderDetail},
 	}}
-	v.Valid = sigOK && active && left > 0 && !paid
+	v.Valid = sigOK && active && q.Currency == PayCurrency && left > 0 && !paid
 	return v, nil
 }
 
@@ -141,6 +142,9 @@ func (e *Engine) calcPay(u *User, req PayRequest) (*payCalc, *Error) {
 	}
 	if !e.verifySig(q) {
 		return nil, errf("ERR_BAD_SIGNATURE", "merchant_sig does not match the key registered for %s", q.MerchantID)
+	}
+	if q.Currency != PayCurrency {
+		return nil, errf("ERR_BAD_CURRENCY", "currency must be %s, got %q", PayCurrency, q.Currency)
 	}
 	amount, x := parseQRAmount(q.AmountUSDC)
 	if x != nil {

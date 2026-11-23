@@ -107,6 +107,11 @@ header.top .sub { color: var(--muted); margin: 2px 0 0; }
 .balance .big { font-family: var(--f-display); font-size: 38px; font-weight: 600; letter-spacing: -.02em; line-height: 1.1; font-variant-numeric: tabular-nums; }
 .bal-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; background: var(--pt-soft); border-radius: 12px; padding: 10px 12px; }
 .bal-row b { color: var(--pt); }
+.wallets { display: flex; flex-direction: column; gap: 8px; }
+.wgrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.wcell { background: var(--panel-2); border-radius: 10px; padding: 8px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.wcell b { font-family: var(--f-mono); font-size: 13px; font-variant-numeric: tabular-nums; }
+.wcell.zero b { color: var(--muted); font-weight: 400; }
 .pay-big { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 16px; font-size: 17px; border-radius: 16px; }
 .pay-big svg, .act svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
@@ -187,7 +192,10 @@ header.top .sub { color: var(--muted); margin: 2px 0 0; }
 .chev { width: 36px; height: 36px; border-radius: 10px; background: #1a1a1a; display: grid; place-items: center; flex: none; }
 .chev svg { width: 18px; height: 18px; fill: none; stroke: #fff; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
 .asset-list { position: absolute; left: 0; right: 0; top: calc(100% + 6px); z-index: 5; background: var(--panel-3); border: 1px solid var(--line); border-radius: 14px; padding: 6px; display: flex; flex-direction: column; gap: 4px; box-shadow: 0 10px 30px rgba(0,0,0,.4); }
-.asset-list button { background: transparent; border: 0; border-radius: 10px; padding: 8px; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.asset-list button { background: transparent; border: 0; border-radius: 10px; padding: 8px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.src-r { display: flex; align-items: center; gap: 10px; }
+.src-bal { display: flex; flex-direction: column; align-items: flex-end; font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.src-bal b { font-size: 15px; color: var(--fg); }
 .asset-list button:hover, .asset-list button[aria-selected="true"] { background: var(--panel-2); }
 
 .toast { position: absolute; left: 18px; right: 18px; bottom: 18px; border-radius: 12px; padding: 12px 14px; font-weight: 500; box-shadow: 0 10px 30px rgba(0,0,0,.4); z-index: 6; }
@@ -286,6 +294,10 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
               <span><b id="bal-pt">0 points</b> <span class="note" id="bal-pt-usd"></span></span>
               <button class="sm" data-go="redeem">Redeem</button>
             </div>
+          </div>
+          <div class="wallets">
+            <div class="section-t"><span>USDC in your wallets</span><span class="note">top up to use</span></div>
+            <div class="wgrid" id="bal-wallet"></div>
           </div>
           <button class="primary pay-big" data-go="pay"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4v-3"/></svg>Pay</button>
           <div class="actions">
@@ -471,6 +483,8 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
     ERR_UNKNOWN_QR: "No payment QR found. Ask the store to show one.",
     ERR_BAD_SIGNATURE: "This QR code was altered or not issued by the store. Nothing was charged.",
     ERR_BAD_QR: "This QR code is not valid. Ask the store for a new one.",
+    ERR_INSUFFICIENT_WALLET: "Not enough USDC in that wallet. Pick another chain or a smaller amount.",
+    ERR_BAD_CURRENCY: "This QR asks for a currency other than USDC.inj. Nothing was charged.",
     ERR_SESSION_TX_LIMIT: "Over your tap-to-pay limit per payment. Raise it in Settings.",
     ERR_SESSION_DAILY_LIMIT: "You reached today's tap-to-pay limit. Raise it in Settings.",
     ERR_INSUFFICIENT_VAULT: "Not enough balance. Top up first.",
@@ -520,7 +534,11 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
     document.querySelectorAll(".phone .screen[id^='v-']").forEach(s => { s.hidden = s.id !== "v-" + v; });
     $("w-menu").hidden = true;
     if (v === "pay") renderPay();
-    if (v === "topup") quoteTopup();
+    if (v === "topup") {
+      const h = U().holdings_micro || {};
+      if (!(h[tuChain] > 0)) { const best = SOURCES.reduce((a, b) => ((h[b.id] || 0) > (h[a.id] || 0) ? b : a)); tuChain = best.id; renderAssetPick(); }
+      quoteTopup();
+    }
     if (v === "redeem") { $("rd-pt").value = Math.max(U().points, 0) || ""; renderRedeem(); }
     if (v === "withdraw") renderWithdraw();
     if (v === "settings") loadSettings();
@@ -545,10 +563,12 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
     renderWallet();
     $("bal-usdc").textContent = "$" + fmtU(u.usdc_micro);
     $("bal-assets").textContent = `${u.atom.toFixed(4)} ATOM · ${u.inj.toFixed(4)} INJ`;
+    $("bal-wallet").innerHTML = SOURCES.map(x => { const v = (u.holdings_micro || {})[x.id] || 0; return `<div class="wcell ${v ? "" : "zero"}"><span class="note">${esc(x.on.split(" ")[0])}</span><b>$${fmtU(v)}</b></div>`; }).join("");
     $("bal-pt").textContent = fmtP(u.points) + " points";
     $("bal-pt-usd").textContent = "≈ $" + (u.points / 100).toFixed(2);
     $("home-agent").innerHTML = adviceHTML();
     renderActivity();
+    renderAssetPick();
     renderPos();
     renderMerchant();
     renderOperator();
@@ -712,10 +732,11 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
   const USDC_ICON = '<svg class="coin" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="16" fill="#2775ca"/><circle cx="16" cy="16" r="10.5" fill="none" stroke="#fff" stroke-width="1.6"/><text x="16" y="21" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="13" font-weight="700" fill="#fff">$</text></svg>';
   const CHEV = '<span class="chev"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></span>';
   const srcHTML = s => `<span class="pill2">${USDC_ICON}<span class="sym">${esc(s.sym)}</span></span><span class="on">on ${esc(s.on)}</span>`;
+  const srcBal = s => { const h = S && U().holdings_micro ? U().holdings_micro[s.id] || 0 : null; return h === null ? "" : `<span class="src-bal"><span class="note">Balance</span><b>${fmtU(h)}</b></span>`; };
   function renderAssetPick() {
     const s = SOURCES.find(x => x.id === tuChain);
-    $("tu-asset").innerHTML = `<span class="asset-col">${srcHTML(s)}</span>${CHEV}`;
-    $("tu-list").innerHTML = SOURCES.map(x => `<button role="option" aria-selected="${x.id === tuChain}" data-src="${x.id}">${srcHTML(x)}</button>`).join("");
+    $("tu-asset").innerHTML = `<span class="asset-col">${srcHTML(s)}</span><span class="src-r">${srcBal(s)}${CHEV}</span>`;
+    $("tu-list").innerHTML = SOURCES.map(x => `<button role="option" aria-selected="${x.id === tuChain}" data-src="${x.id}"><span class="asset-col">${srcHTML(x)}</span>${srcBal(x)}</button>`).join("");
     $("tu-list").querySelectorAll("[data-src]").forEach(b => b.onclick = () => {
       tuChain = b.dataset.src; $("tu-list").hidden = true; $("tu-asset").setAttribute("aria-expanded", "false");
       renderAssetPick(); quoteTopup();

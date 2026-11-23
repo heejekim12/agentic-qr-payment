@@ -15,6 +15,9 @@ const (
 	maxAmount    int64 = 100_000 * Micro
 )
 
+// PayCurrency is the only currency the Vault accepts for QR payments.
+const PayCurrency = "USDC.inj"
+
 type Asset string
 
 const (

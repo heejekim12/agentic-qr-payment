@@ -25,14 +25,15 @@ func quoteTopup(chain string, amount float64) (TopupQuote, error) {
 func (e *Engine) QuoteTopup(req TopupRequest) (TopupQuote, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	if _, err := e.user(req.User); err != nil {
+	u, err := e.user(req.User)
+	if err != nil {
 		return TopupQuote{}, err
 	}
 	q, err := quoteTopup(req.Chain, req.Amount)
 	if err != nil {
 		return q, err
 	}
-	return q, nil
+	return q, walletCovers(u, q)
 }
 
 // Topup mirrors SkipClient.executeRoute() with Vault.DepositUsdc as the post-route action.
@@ -47,7 +48,11 @@ func (e *Engine) Topup(req TopupRequest) (TopupQuote, error) {
 	if err != nil {
 		return q, err
 	}
+	if err := walletCovers(u, q); err != nil {
+		return q, err
+	}
 	e.newTx()
+	u.Holdings[q.Chain] -= q.Amount
 	u.USDC += q.Out
 	e.stats.TopUps++
 	e.stats.TopUpVolume += q.Out
@@ -60,6 +65,14 @@ func (e *Engine) Topup(req TopupRequest) (TopupQuote, error) {
 	e.log("skip", u.Name+" wallet", "SkipClient.executeRoute()", fmt.Sprintf("signed on %s (%s); post-route action Vault.DepositUsdc for %s", q.Name, q.Chain, u.Addr))
 	e.log("ok", "Skip:Go relayer", "Vault.DepositUsdc", fmt.Sprintf("%s Vault +%s USDC", u.Name, FormatUSDC(q.Out)))
 	return q, nil
+}
+
+// walletCovers checks the user's (sample) wallet balance on the source chain.
+func walletCovers(u *User, q TopupQuote) error {
+	if have := u.Holdings[q.Chain]; q.Amount > have {
+		return errf("ERR_INSUFFICIENT_WALLET", "your %s wallet has %s %s", q.Name, FormatUSDC(have), q.Denom)
+	}
+	return nil
 }
 
 type WithdrawRequest struct {

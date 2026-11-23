@@ -30,7 +30,7 @@ func (e *Engine) seedSample() {
 	areas := map[string]string{"MRC_BAR_001": "Seongsu", "MRC_CAFE_002": "Yeonnam", "MRC_REST_014": "Euljiro", "MRC_REST_031": "Mangwon"}
 	start := max(0, minuteOfDay(e.now())-30)
 	promos := map[string]*Promo{
-		"MRC_BAR_001": {StartMin: 14 * 60, EndMin: 17 * 60, ExtraBps: 200},
+		"MRC_BAR_001":  {StartMin: 14 * 60, EndMin: 17 * 60, ExtraBps: 200},
 		"MRC_CAFE_002": {StartMin: start, EndMin: min(24*60, start+120), ExtraBps: 200}, // window around server start so the demo has an active one
 		"MRC_REST_014": {StartMin: 15 * 60, EndMin: 17 * 60, ExtraBps: 300},
 	}

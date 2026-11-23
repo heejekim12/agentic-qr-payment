@@ -178,11 +178,12 @@ QR authentication: the merchant POS signs the canonical string below with its ed
 qr_version|merchant_id|order_id|amount_usdc|currency|expires_at
 ```
 
-Before paying, the app shows four checks from `/api/qr/verify`: store signature, approved store, not expired, order not paid yet.
+Before paying, the app shows five checks from `/api/qr/verify`: store signature, approved store, pays in USDC.inj, not expired, order not paid yet.
 
 `ExecuteQrPayment` runs these checks and changes in one transaction. If any check fails, nothing moves.
 
 1. `merchant_sig` verifies against the registered `pubkey`.
+   `currency` must be `USDC.inj`; any other value is rejected with `ERR_BAD_CURRENCY`.
 2. Merchant is `ACTIVE` in the registry.
 3. QR has not expired (120 seconds).
 4. `order_id` has not been paid.
