@@ -5,7 +5,7 @@
 ## In short
 
 - **Top up:** USDC.inj on Injective goes straight in. USDC on Base, Ethereum or Solana is routed through [Skip:Go](https://go.skip.build/) into your vault as USDC.inj; ATOM on the Cosmos Hub is moved over IBC and kept as ATOM. You sign the route in your own wallet.
-- **Pay:** The app checks the store's signature on the QR before paying. Pay with USDC.inj, or with ATOM: Skip:Go swaps just enough ATOM to USDC.inj inside the payment, with a 1% slippage limit. A payment-only key you register once (with limits) signs for you, and the platform pays the gas, so there is no popup. The store always receives the full price in USDC.inj in the same transaction, and paying with ATOM earns more store points (+2% in the demo).
+- **Pay:** The app checks the store's signature on the QR before paying. Pay with USDC.inj, or with ATOM: Skip:Go swaps just enough ATOM to USDC.inj inside the payment, with a 1% slippage limit. A payment-only key you register once (with limits) signs for you, and the platform pays the gas, so there is no popup. The store always receives the full price in USDC.inj in the same transaction, and paying with ATOM earns more than twice the store points (7% vs 3% at every store in the demo).
 - **Points:** Each store gives its own points, usable only as a discount at that store. Points are never converted to coins, and the platform never sends crypto to users or merchants.
 - **Platform revenue:** Skip:Go (our routing service) earns route fees on top-ups and ATOM payment swaps. Merchants: free for KRW 0.3B or less in annual sales, KRW 30,000 a month for KRW 0.3-0.5B. Merchants pay no per-payment fee.
 
@@ -129,8 +129,8 @@ flowchart TB
 | `category` | enum `CAFE`, `BAR`, `RESTAURANT`, `OTHER` | `BAR` |
 | `status` | enum `ACTIVE`, `SUSPENDED` | `ACTIVE` |
 | `settlement_addr` | inj1 address | `inj1abc...xyz` |
-| `point_earn_bps` | u16 | `500` (5.00% of the paid amount) |
-| `atom_bonus_bps` | u16 | `200` (+2.00% extra when paying with ATOM) |
+| `point_earn_bps` | u16 | `300` (3.00% of the paid amount) |
+| `atom_bonus_bps` | u16 | `400` (+4.00% extra when paying with ATOM) |
 | `pubkey` | ed25519 public key (hex) | `5e916eaa...` |
 
 Only `ACTIVE` merchants can be paid. `pubkey` verifies the merchant's QR signatures. Status changes are signed by the registry admin multisig. The subscription is billed off-chain and is not part of the registry.
@@ -241,9 +241,9 @@ The owner signs `Vault.Withdraw` to send USDC.inj or ATOM back to their own addr
 | Parameter | Demo value |
 | --- | --- |
 | POINT value | 1 POINT = $0.01 off at the issuing store |
-| Earn rate | `point_earn_bps` of the paid amount (POINT-paid parts excluded): 5% (cafe, bar), 3% (restaurants); happy hour adds 3% of the order. Set like a stamp card (buy 10, get 1 free is about 9.1%) and above card rewards |
-| ATOM bonus | `atom_bonus_bps`, +2.00% in the demo, set by each store, added when paying with ATOM; with the 0.30% swap fee the customer nets +1.70% over USDC.inj |
-| Example | $5.00 at a cafe paid with ATOM: 5% + 2% = 7%, 35 POINT ($0.35) |
+| Earn rate | `point_earn_bps` of the paid amount (POINT-paid parts excluded): 3% at every store; happy hour adds 3% of the order. Above card rewards; with ATOM, close to a stamp card (buy 10, get 1 free is about 9.1%) |
+| ATOM bonus | `atom_bonus_bps`, +4% at every store (7% in total), added when paying with ATOM; with the 0.30% swap fee the customer nets +3.70% over USDC.inj |
+| Example | $5.00 at any store: 15 POINT ($0.15) with USDC.inj, 35 POINT ($0.35) with ATOM |
 | Merchant cost | Only when POINT is spent at the store, as a discount; unspent POINT costs nothing |
 | Where it can be spent | Only at the store that gave it |
 | Conversion | None; POINT is never redeemed for coins or cash |
