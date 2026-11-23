@@ -7,9 +7,13 @@ import (
 )
 
 // Redeem bonus guardrails enforced on every AI update.
+// Bonus bounds. The ATOM floor yields only when the pool cannot cover it (solvency first).
 const (
-	boostMaxPct  = 15 // highest bonus the agent may set
-	boostStepPct = 2  // largest change per update, in percentage points
+	atomMinPct   = 3  // keeps ATOM clearly above USDC.inj after route cost
+	atomMaxPct   = 10 // caps sponsor cost
+	injMinPct    = 0
+	injMaxPct    = 5
+	boostStepPct = 2 // largest change per update, in percentage points
 )
 
 // BoostState tells the operator how the current bonus was set.
@@ -38,13 +42,14 @@ type boostFacts struct {
 	RedeemedUSD  map[Asset]float64 `json:"redeemed_value_usd_by_asset"`
 	RouteCostPct map[Asset]float64 `json:"route_cost_pct"`
 	CurrentPct   map[Asset]int64   `json:"current_bonus_pct"`
-	MaxPct       int               `json:"max_bonus_pct"`
+	AffordPct    int64             `json:"max_atom_pct_pool_can_cover"`
+	Bounds       map[string]int64  `json:"bounds_pct"`
 	MaxStepPct   int               `json:"max_change_per_update_pct"`
 }
 
 const boostSystem = `You set redemption bonuses for a rewards program. Points redeem to ATOM, INJ or USDC.inj.
 Goals, in order: keep the reward pool solvent, keep ATOM the best value after route cost, then INJ, then USDC.inj, and give ATOM a clear edge (about 5% net over USDC.inj) when the pool can afford it.
-Constraints: integers; 0 <= inj_pct < atom_pct <= max_bonus_pct; reward_pool_usd >= outstanding_points_usd * (1 + atom_pct/100); each value may differ from current_bonus_pct by at most max_change_per_update_pct.
+Constraints: integers; atom_pct within bounds_pct atom_min..atom_max and at most max_atom_pct_pool_can_cover (if that is below atom_min, go below atom_min); inj_pct within inj_min..inj_max and below atom_pct; each value may differ from current_bonus_pct by at most max_change_per_update_pct.
 If ATOM's share of redeemed value is low, lean toward a larger ATOM edge. Reason: one short sentence with numbers from the facts.`
 
 var boostSchema = map[string]any{
@@ -59,13 +64,16 @@ var boostSchema = map[string]any{
 func (e *Engine) boostFactsLocked() boostFacts {
 	f := boostFacts{
 		PoolUSD: float64(e.pool.Balance) / float64(Micro), RedeemedUSD: map[Asset]float64{},
-		RouteCostPct: map[Asset]float64{}, CurrentPct: map[Asset]int64{}, MaxPct: boostMaxPct, MaxStepPct: boostStepPct,
+		RouteCostPct: map[Asset]float64{}, CurrentPct: map[Asset]int64{}, MaxStepPct: boostStepPct,
+		Bounds: map[string]int64{"atom_min": atomMinPct, "atom_max": atomMaxPct, "inj_min": injMinPct, "inj_max": injMaxPct},
 	}
 	for _, u := range e.users {
 		f.LiabilityUSD += float64(u.Points*PointValue) / float64(Micro)
 	}
+	f.AffordPct = atomMaxPct
 	if f.LiabilityUSD > 0 {
 		f.CoveragePct = f.PoolUSD / f.LiabilityUSD * 100
+		f.AffordPct = int64(math.Floor((f.PoolUSD/f.LiabilityUSD - 1) * 100))
 	}
 	for _, a := range Assets {
 		f.RedeemedUSD[a] = float64(e.stats.Redeemed[a].Value) / float64(Micro)
@@ -81,8 +89,10 @@ func netValue(bonusPct int64, routePct float64) float64 {
 
 func validBoost(atom, inj int64, f boostFacts) error {
 	switch {
-	case atom < 0 || inj < 0 || atom > boostMaxPct:
-		return fmt.Errorf("bonus out of range")
+	case atom < 0 || atom > atomMaxPct || (atom < atomMinPct && f.AffordPct >= atomMinPct):
+		return fmt.Errorf("ATOM bonus outside %d-%d%%", atomMinPct, atomMaxPct)
+	case inj < injMinPct || inj > injMaxPct || (inj >= atom && atom > 0):
+		return fmt.Errorf("INJ bonus outside %d-%d%% or not below ATOM", injMinPct, injMaxPct)
 	case abs64(atom-f.CurrentPct[ATOM]) > boostStepPct || abs64(inj-f.CurrentPct[INJ]) > boostStepPct:
 		return fmt.Errorf("change larger than %d points", boostStepPct)
 	case !(netValue(atom, f.RouteCostPct[ATOM]) > netValue(inj, f.RouteCostPct[INJ]) && netValue(inj, f.RouteCostPct[INJ]) > 1):
@@ -107,7 +117,7 @@ func clampStep(target, cur int64) int64 {
 // ruleBoost is the fallback: ATOM about 6 points over its route cost, capped by what the
 // pool covers with a 20% buffer; INJ 4 points below ATOM; each moves at most boostStepPct.
 func ruleBoost(f boostFacts) boostSuggestion {
-	afford := int64(boostMaxPct)
+	afford := int64(atomMaxPct)
 	if f.LiabilityUSD > 0 {
 		afford = int64(math.Floor((f.PoolUSD/(f.LiabilityUSD*1.2) - 1) * 100))
 	}
@@ -119,9 +129,12 @@ func ruleBoost(f boostFacts) boostSuggestion {
 	if total > 0 && f.RedeemedUSD[ATOM]/total < 0.5 {
 		target++
 	}
-	target = max(0, min(target, boostMaxPct, afford))
+	target = max(0, min(target, atomMaxPct, afford))
+	if f.AffordPct >= atomMinPct {
+		target = max(target, atomMinPct)
+	}
 	atom := clampStep(target, f.CurrentPct[ATOM])
-	inj := clampStep(max(0, atom-4), f.CurrentPct[INJ])
+	inj := min(injMaxPct, clampStep(max(injMinPct, atom-4), f.CurrentPct[INJ]))
 	for inj > 0 && validBoost(atom, inj, f) != nil {
 		inj--
 	}

@@ -296,8 +296,8 @@ Other items:
 
 | Item | Rate | Payer | Destination |
 | --- | --- | --- | --- |
-| ATOM bonus | Set by the AI agent (0-15%, start +7%) | Ecosystem sponsor budget | User |
-| INJ bonus | Set by the AI agent, always below ATOM (start +3%) | Ecosystem sponsor budget | User |
+| ATOM bonus | Set by the AI agent daily within 3-10% (start +7%) | Ecosystem sponsor budget | User |
+| INJ bonus | Set by the AI agent daily within 0-5%, always below ATOM (start +3%) | Ecosystem sponsor budget | User |
 | Happy hour | Extra POINT the merchant chooses (`extra_bps`) | Merchant | User, through the Reward Pool |
 | Skip:Go route fee | 0.2-0.3% on top-up and redemption routes | User (top-up), Reward Pool (redemption) | Skip:Go |
 | POINT expiry | Unused for 12 months | - | Returned to the Reward Pool |
@@ -375,7 +375,8 @@ Inputs: Reward Pool balance, outstanding POINT value, coverage, redeemed value p
 
 Guardrails enforced in code (`internal/engine/boost.go`):
 
-- 0% <= INJ < ATOM <= 15%
+- ATOM 3-10%: the floor keeps ATOM clearly above USDC.inj after route cost; the ceiling caps sponsor cost. The floor yields only when the pool cannot cover it (solvency first)
+- INJ 0-5%, always below ATOM
 - Each update moves a bonus by at most 2 percentage points
 - Net value after route cost: ATOM > INJ > USDC.inj
 - Pool balance >= outstanding POINT value x (1 + ATOM bonus)
