@@ -62,11 +62,26 @@ type Merchant struct {
 	PointEarnBps   int64  `json:"point_earn_bps"`
 	Received       int64  `json:"received_micro"`
 	PubKey         string `json:"pubkey"` // ed25519 public key that verifies this merchant's QR
+	Area           string `json:"area"`
+	Promo          *Promo `json:"promo,omitempty"` // merchant-approved happy hour, paid by the merchant
 	Orders         int    `json:"orders"`
 	Sales          int64  `json:"sales_micro"`
 	Fees           int64  `json:"fees_micro"`
 	PointComp      int64  `json:"point_comp_micro"` // POINT discounts paid to the merchant by the Reward Pool
 	Refunds        int    `json:"refunds"`
+}
+
+// Promo is a daily happy-hour window in KST minutes since midnight.
+type Promo struct {
+	StartMin int   `json:"start_min"`
+	EndMin   int   `json:"end_min"`
+	ExtraBps int64 `json:"extra_bps"`
+}
+
+// Profile is sample spending history used by the agent's advice.
+type Profile struct {
+	AvgOrder int64 `json:"avg_order_micro"`
+	PerWeek  int64 `json:"orders_per_week"`
 }
 
 // Stats are platform-wide totals for the overview screen; payment figures are gross of refunds.
@@ -126,19 +141,22 @@ type HistoryEntry struct {
 }
 
 type User struct {
-	Name             string          `json:"name"`
-	Addr             string          `json:"addr"`
-	CosmosAddr       string          `json:"cosmos_addr"`
-	USDC             int64           `json:"usdc_micro"`
-	Points           int64           `json:"points"`
-	ATOM             float64         `json:"atom"`
-	INJ              float64         `json:"inj"`
-	Session          Session         `json:"session"`
-	Policy           Policy          `json:"policy"`
-	RedeemedToday    int64           `json:"redeemed_today_micro"`
-	NextEarnBonusBps int64           `json:"next_earn_bonus_bps"`
-	History          []*HistoryEntry `json:"history"`
-	Wallet           string          `json:"wallet,omitempty"`
+	Name             string           `json:"name"`
+	Addr             string           `json:"addr"`
+	CosmosAddr       string           `json:"cosmos_addr"`
+	USDC             int64            `json:"usdc_micro"`
+	Points           int64            `json:"points"`
+	ATOM             float64          `json:"atom"`
+	INJ              float64          `json:"inj"`
+	Session          Session          `json:"session"`
+	Policy           Policy           `json:"policy"`
+	RedeemedToday    int64            `json:"redeemed_today_micro"`
+	NextEarnBonusBps int64            `json:"next_earn_bonus_bps"`
+	History          []*HistoryEntry  `json:"history"`
+	Wallet           string           `json:"wallet,omitempty"`
+	Area             string           `json:"area"`
+	Profile          Profile          `json:"profile"`
+	Holdings         map[string]int64 `json:"holdings_micro"` // sample USDC held per source chain
 	day              string
 	demoAddr         string
 	demoCosmos       string
@@ -216,20 +234,13 @@ type Receipt struct {
 	Paid          int64  `json:"paid_micro"`
 	PointsEarned  int64  `json:"points_earned"`
 	EarnBps       int64  `json:"earn_bps"`
+	PromoBps      int64  `json:"promo_bps"`
 	BonusApplied  bool   `json:"bonus_applied"`
 	SignedBy      string `json:"signed_by"`
 }
 
-type AgentCard struct {
-	Kind    string   `json:"kind"` // info, suggest
-	Message string   `json:"message"`
-	Lines   []string `json:"lines,omitempty"`
-	Points  int64    `json:"points,omitempty"`
-}
-
 type PayResult struct {
-	Receipt Receipt   `json:"receipt"`
-	Agent   AgentCard `json:"agent"`
+	Receipt Receipt `json:"receipt"`
 }
 
 // Error is a contract-style rejection with a stable code.

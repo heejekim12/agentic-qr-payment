@@ -128,7 +128,7 @@ type payCalc struct {
 	q                              *QR
 	m                              *Merchant
 	amount, pUsed, aPt, aUsdc, fee int64
-	earnBps, pEarned               int64
+	earnBps, pEarned, promoBps     int64
 	bonus                          bool
 }
 
@@ -179,7 +179,12 @@ func (e *Engine) calcPay(u *User, req PayRequest) (*payCalc, *Error) {
 		return nil, errf("ERR_POOL_INSUFFICIENT", "Reward Pool cannot cover the POINT discount")
 	}
 	c.fee = c.aUsdc * m.FeeBps / 10_000
-	c.earnBps = m.PointEarnBps + u.NextEarnBonusBps
+	if m.Promo != nil && promoActive(m.Promo, e.now()) {
+		// Happy-hour points are paid by the merchant as an extra fee into the Reward Pool.
+		c.promoBps = m.Promo.ExtraBps
+		c.fee += c.amount * c.promoBps / 10_000
+	}
+	c.earnBps = m.PointEarnBps + u.NextEarnBonusBps + c.promoBps
 	c.pEarned = c.amount * c.earnBps / 10_000 / PointValue
 	c.bonus = u.NextEarnBonusBps > 0
 	return c, nil
@@ -192,7 +197,7 @@ func receipt(c *payCalc, sessionActive bool) Receipt {
 	}
 	return Receipt{
 		OrderID: c.q.OrderID, Merchant: c.m.Name, Amount: c.amount, PointsUsed: c.pUsed, PointDiscount: c.aPt,
-		Paid: c.aUsdc, PointsEarned: c.pEarned, EarnBps: c.earnBps, BonusApplied: c.bonus, SignedBy: signedBy,
+		Paid: c.aUsdc, PointsEarned: c.pEarned, EarnBps: c.earnBps, PromoBps: c.promoBps, BonusApplied: c.bonus, SignedBy: signedBy,
 	}
 }
 
@@ -266,7 +271,7 @@ func (e *Engine) Pay(req PayRequest) (*PayResult, error) {
 		"%s · %s · registry %s ACTIVE · sig/expiry/order ok · session limits ok\nburn %d POINT (pool pays $%s) · Vault -%s · merchant +%s · pool fee +%s · mint %d POINT",
 		u.Name, c.q.OrderID, c.m.ID, c.pUsed, FormatUSDC(c.aPt), FormatUSDC(c.aUsdc), FormatUSDC(c.aUsdc-c.fee+c.aPt), FormatUSDC(c.fee), c.pEarned))
 
-	return &PayResult{Receipt: receipt(c, s.Active), Agent: e.runAgent(u)}, nil
+	return &PayResult{Receipt: receipt(c, s.Active)}, nil
 }
 
 type RefundRequest struct {

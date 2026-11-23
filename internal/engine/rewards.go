@@ -121,15 +121,3 @@ func fmtAmount(a Asset, v float64) string {
 	}
 	return fmt.Sprintf("%.4f", v)
 }
-
-// runAgent advises after each payment. It never redeems; the user decides and signs.
-func (e *Engine) runAgent(u *User) AgentCard {
-	P, th := u.Points, u.Policy.Threshold
-	if P < th {
-		return AgentCard{Kind: "info", Message: fmt.Sprintf("You have %d points, worth $%s off your next order.", P, FormatUSDC(P*PointValue))}
-	}
-	qa, qu := e.quote(P, ATOM), e.quote(P, USDCINJ)
-	return AgentCard{Kind: "suggest", Points: P, Message: fmt.Sprintf(
-		"You have %d points. As ATOM they are worth %.4f ATOM ($%s, +%d%% bonus), $%s more than USDC.inj. You can also keep them for a discount.",
-		P, qa.Amount, FormatUSDC(qa.Net), e.boostBps[ATOM]/100, FormatUSDC(qa.Net-qu.Net))}
-}

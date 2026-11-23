@@ -24,7 +24,7 @@ func main() {
 		Handler:           mux,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
-		WriteTimeout:      10 * time.Second,
+		WriteTimeout:      30 * time.Second, // covers the 20 s advisor call
 		IdleTimeout:       60 * time.Second,
 	}
 	log.Printf("listening on http://%s", *addr)

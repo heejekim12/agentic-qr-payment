@@ -124,6 +124,10 @@ header.top .sub { color: var(--muted); margin: 2px 0 0; }
 .agent { border: 1px solid var(--accent); background: var(--accent-soft); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
 .agent .hd { font-size: 12px; font-weight: 600; color: var(--accent); }
 .agent p { margin: 0; }
+.adv { display: flex; flex-direction: column; gap: 2px; padding-top: 10px; border-top: 1px solid rgba(143,155,255,.25); }
+.adv-h { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.adv .t { font-weight: 600; font-size: 13.5px; }
+.adv .why { font-style: italic; }
 
 .merchant-head { display: flex; flex-direction: column; align-items: center; gap: 6px; padding-top: 4px; }
 .mname { font-family: var(--f-display); font-size: 17px; font-weight: 600; }
@@ -475,7 +479,7 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
     ERR_BAD_POLICY: "Check the values and try again.",
   };
   let S = null, cur = 0, qr = null, posPaid = false, timerId = null;
-  let usePts = true, payDone = null, lastAgent = null, redeemTarget = "ATOM", tuTimer = null;
+  let usePts = true, payDone = null, advice = {}, redeemTarget = "ATOM", tuTimer = null;
 
   const $ = id => document.getElementById(id);
   const U = () => S.users[cur];
@@ -488,6 +492,8 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
   const showErr = (id, e) => { const el = $(id); el.textContent = e ? friendly(e) : ""; el.hidden = !e; };
   const amt = (asset, v) => v.toFixed(asset === "USDC_INJ" ? 2 : 4);
   const txLink = (h, label = "View transaction") => /^[0-9A-F]{64}$/.test(h || "") ? `<a class="tx" href="${MINTSCAN}${h}" target="_blank" rel="noopener">${label} ↗</a>` : "";
+  const hm = n => String(Math.floor(n / 60)).padStart(2, "0") + ":" + String(n % 60).padStart(2, "0");
+  const promoText = p => `${hm(p.start_min)}–${hm(p.end_min)} +${p.extra_bps / 100}%`;
   const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
   const kpi = (k, v, s) => `<div class="kpi"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div>${s ? `<div class="s">${esc(s)}</div>` : ""}</div>`;
 
@@ -517,9 +523,11 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
   document.addEventListener("click", e => {
     const g = e.target.closest("[data-go]");
     if (g) { if (g.dataset.go === "home") payDone = null; go(g.dataset.go); }
-    const ar = e.target.closest("[data-agent-redeem]");
-    if (ar) reviewRedeem(Number(ar.dataset.agentRedeem));
-    if (e.target.closest("[data-dismiss-agent]")) { lastAgent = null; render(); if (payDone) renderPay(); }
+    const ar = e.target.closest("[data-adv-redeem]");
+    if (ar) { const [pts, t] = ar.dataset.advRedeem.split(":"); reviewRedeem(Number(pts), t); }
+    const at = e.target.closest("[data-adv-topup]");
+    if (at) { const [m, c] = at.dataset.advTopup.split(":"); openTopup(Number(m), c); }
+    if (e.target.closest("[data-ask-agent]")) askAgent();
     if (!e.target.closest(".wallet")) $("w-menu").hidden = true;
     if (!e.target.closest(".asset-pick")) $("tu-list").hidden = true;
   });
@@ -534,7 +542,7 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
     $("bal-assets").textContent = `${u.atom.toFixed(4)} ATOM · ${u.inj.toFixed(4)} INJ`;
     $("bal-pt").textContent = fmtP(u.points) + " points";
     $("bal-pt-usd").textContent = "≈ $" + (u.points / 100).toFixed(2);
-    $("home-agent").innerHTML = lastAgent && lastAgent.user === cur ? agentHTML(lastAgent.card) : "";
+    $("home-agent").innerHTML = adviceHTML();
     renderActivity();
     renderPos();
     renderMerchant();
@@ -562,18 +570,37 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
     }).join("");
   }
 
-  // ---------- agent (suggestions only) ----------
-  function agentHTML(a) {
-    const actions = a.kind === "suggest"
-      ? `<div class="row"><button class="primary" data-agent-redeem="${a.points}">Review redeem</button><button data-dismiss-agent>Keep points</button></div>`
-      : "";
-    return `<div class="agent"><span class="hd">${a.kind === "suggest" ? "Suggestion" : "Tip"}</span><p>${esc(a.message)}</p>${actions}</div>`;
+  // ---------- agent: advice only, the user executes ----------
+  function adviceHTML() {
+    const a = advice[cur];
+    if (!a) return `<div class="agent"><span class="hd">Agent</span><p>Get advice on your points, balance and happy hours nearby.</p><div class="row"><button class="primary" data-ask-agent>Ask agent</button></div></div>`;
+    if (a.loading) return `<div class="agent"><span class="hd">Agent</span><p>Thinking…</p></div>`;
+    const src = a.source === "ai" ? `<span class="pill acc">AI · ${esc(a.model)}</span>` : `<span class="pill mute" title="${esc(a.note || "")}">Rule-based</span>`;
+    const items = a.items.map(it => {
+      const btn = it.action === "redeem" ? `<button class="sm" data-adv-redeem="${it.points}:${esc(it.target)}">Review</button>`
+        : it.action === "topup" ? `<button class="sm" data-adv-topup="${it.amount_micro}:${esc(it.chain)}">Review</button>` : "";
+      return `<div class="adv"><div class="adv-h"><span class="t">${esc(it.title)}</span>${btn}</div><span class="note">${esc(it.detail)}</span><span class="note why">${esc(it.reason)}</span></div>`;
+    }).join("");
+    return `<div class="agent"><div class="adv-h"><span class="hd">Agent advice</span>${src}</div>${items}<div class="adv-h"><span class="note">Suggestions only. You decide.</span><button class="link" data-ask-agent>Refresh</button></div></div>`;
   }
-  function reviewRedeem(points) {
-    payDone = null; lastAgent = null; redeemTarget = "ATOM";
+  async function askAgent() {
+    const ui = cur;
+    advice[ui] = { loading: true }; render(); if (payDone) renderPay();
+    try { advice[ui] = await api("POST", "/api/advice", { user: ui }); }
+    catch (e) { advice[ui] = null; toast(friendly(e), "bad"); }
+    render(); if (payDone) renderPay();
+  }
+  function reviewRedeem(points, target) {
+    payDone = null; redeemTarget = target || "ATOM";
     go("redeem");
     $("rd-pt").value = points;
     renderRedeem();
+  }
+  function openTopup(amountMicro, chain) {
+    payDone = null;
+    if (SOURCES.some(x => x.id === chain)) { tuChain = chain; renderAssetPick(); }
+    $("tu-amt").value = (amountMicro / MICRO).toFixed(0);
+    go("topup");
   }
 
   // ---------- wallet ----------
@@ -606,7 +633,7 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
     await api("POST", "/api/wallet/disconnect", { user: cur }).catch(e => toast(friendly(e), "bad"));
     await refresh();
   };
-  $("user-sel").onchange = e => { cur = Number(e.target.value); payDone = null; lastAgent = null; go("home"); render(); };
+  $("user-sel").onchange = e => { cur = Number(e.target.value); payDone = null; go("home"); render(); };
 
   // ---------- pay ----------
   const ICON_OK = '<svg viewBox="0 0 24 24"><path d="M5 12l5 5L19 7"/></svg>';
@@ -625,10 +652,10 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
         <div class="lines">
           <span>Order</span><span class="n">$${fmtU(x.amount_micro)}</span>
           <span>Points used</span><span class="n">−$${fmtU(x.point_discount_micro)}</span>
-          <span class="pt">Points earned</span><span class="n pt">+${fmtP(x.points_earned)}</span>
+          <span class="pt">Points earned${x.promo_bps ? ` (incl. +${x.promo_bps / 100}% happy hour)` : ""}</span><span class="n pt">+${fmtP(x.points_earned)}</span>
         </div>
         <p class="center">${txLink(x.tx_hash)}</p>
-        ${lastAgent && lastAgent.user === cur ? agentHTML(lastAgent.card) : ""}
+        ${adviceHTML()}
         <button class="primary block" data-go="home">Done</button>`;
       return;
     }
@@ -647,7 +674,7 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
       ${pv ? `<div class="lines">
         ${pv.points_used ? `<span>Points</span><span class="n">−$${fmtU(pv.point_discount_micro)}</span>` : ""}
         <span class="tot">You pay</span><span class="n tot">$${fmtU(pv.paid_micro)}</span>
-        <span class="pt">You earn</span><span class="n pt">+${fmtP(pv.points_earned)} points</span>
+        <span class="pt">You earn${pv.promo_bps ? ` (+${pv.promo_bps / 100}% happy hour)` : ""}</span><span class="n pt">+${fmtP(pv.points_earned)} points</span>
       </div>` : ""}
       ${err ? `<div class="alert">${esc(friendly(err))}</div>` : ""}
       <button class="primary block" id="pay-go">${pv ? "Pay $" + fmtU(pv.paid_micro) : "Try to pay"}</button>`;
@@ -660,8 +687,11 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
       await refresh();
       const h = U().history.find(x => x.order_id === r.receipt.order_id && x.type === "PAY");
       payDone = { ...r.receipt, tx_hash: h ? h.tx_hash : "" };
-      lastAgent = { user: cur, card: r.agent }; posPaid = true; qr = null;
+      posPaid = true; qr = null;
       posTick();
+      renderPay();
+      askAgent();
+      return;
     } catch (e) { toast(friendly(e), "bad"); }
     await refresh(); renderPay();
   }
@@ -833,7 +863,7 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
     const id = $("pos-merchant").value || S.merchants[0].merchant_id;
     const m = S.merchants.find(x => x.merchant_id === id);
     $("md-title").textContent = m.name;
-    $("md-status").innerHTML = m.status === "ACTIVE" ? '<span class="pill ok">Approved</span>' : '<span class="pill bad">Suspended</span>';
+    $("md-status").innerHTML = (m.promo ? `<span class="pill acc">Happy hour ${promoText(m.promo)}</span> ` : "") + (m.status === "ACTIVE" ? '<span class="pill ok">Approved</span>' : '<span class="pill bad">Suspended</span>');
     $("md-kpis").innerHTML =
       kpi("Sales", "$" + fmtU(m.sales_micro), plural(m.orders, "order")) +
       kpi("Received", "$" + fmtU(m.received_micro), `after ${(m.fee_bps / 100).toFixed(1)}% fee`);
@@ -885,8 +915,8 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
     $("rp-pause").textContent = p.paused ? "Resume rewards" : "Pause rewards";
 
     const stores = [...S.merchants].sort((a, b) => b.sales_micro - a.sales_micro);
-    $("op-stores").innerHTML = `<thead><tr><th>Store</th><th>Status</th><th class="n">Orders</th><th class="n">Sales</th><th class="n">Fee</th></tr></thead><tbody>` +
-      stores.map(m => `<tr><td>${esc(m.name)}</td><td><button class="sm" data-m="${esc(m.merchant_id)}"><span class="pill ${m.status === "ACTIVE" ? "ok" : "bad"}">${m.status === "ACTIVE" ? "Approved" : "Suspended"}</span></button></td><td class="n">${m.orders}</td><td class="n">$${fmtU(m.sales_micro)}</td><td class="n">${(m.fee_bps / 100).toFixed(1)}%</td></tr>`).join("") + `</tbody>`;
+    $("op-stores").innerHTML = `<thead><tr><th>Store</th><th>Status</th><th>Happy hour</th><th class="n">Orders</th><th class="n">Sales</th><th class="n">Fee</th></tr></thead><tbody>` +
+      stores.map(m => `<tr><td>${esc(m.name)}</td><td><button class="sm" data-m="${esc(m.merchant_id)}"><span class="pill ${m.status === "ACTIVE" ? "ok" : "bad"}">${m.status === "ACTIVE" ? "Approved" : "Suspended"}</span></button></td><td>${m.promo ? promoText(m.promo) : "–"}</td><td class="n">${m.orders}</td><td class="n">$${fmtU(m.sales_micro)}</td><td class="n">${(m.fee_bps / 100).toFixed(1)}%</td></tr>`).join("") + `</tbody>`;
     $("op-stores").querySelectorAll("[data-m]").forEach(b => b.onclick = async () => { await api("POST", "/api/merchants/status", { merchant_id: b.dataset.m }).catch(() => {}); await refresh(); });
 
     const rows = Object.entries(st.rejected).sort((a, b) => b[1] - a[1]);

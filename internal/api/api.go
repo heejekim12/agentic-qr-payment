@@ -37,6 +37,7 @@ func Register(mux *http.ServeMux, e *engine.Engine) {
 	mux.Handle("POST /api/wallet/disconnect", handle(noResult(e.DisconnectWallet)))
 	mux.Handle("POST /api/policy", handle(noResult(e.SetPolicy)))
 	mux.Handle("POST /api/qr", handle(e.CreateQR))
+	mux.Handle("POST /api/advice", handle(e.Advise))
 	mux.Handle("POST /api/qr/verify", handle(e.VerifyQR))
 	mux.Handle("POST /api/pay/preview", handle(e.PreviewPay))
 	mux.Handle("POST /api/pay", handle(e.Pay))

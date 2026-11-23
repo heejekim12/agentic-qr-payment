@@ -63,6 +63,7 @@ func New() *Engine {
 	for _, a := range Assets {
 		e.stats.Redeemed[a] = &AssetStat{}
 	}
+	e.seedSample()
 	for _, m := range e.merchants {
 		pub, priv, err := ed25519.GenerateKey(rand.Reader)
 		if err != nil {

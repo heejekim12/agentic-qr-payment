@@ -2,7 +2,7 @@
 
 Demo of a non-custodial prepaid QR payment and point reward program on Injective.
 
-Users deposit USDC into their own Prepaid Vault, pay whitelisted cafes and restaurants by QR without a wallet popup, earn soulbound POINT, and redeem POINT for ATOM, USDC.inj or INJ. An agent suggests when and what to redeem, but only the user redeems, and ATOM always returns more value per point than USDC.inj.
+Users deposit USDC into their own Prepaid Vault, pay whitelisted cafes and restaurants by QR without a wallet popup, earn soulbound POINT, and redeem POINT for ATOM, USDC.inj or INJ. An AI agent advises which points to keep or redeem, when to top up and from which chain, and which nearby store has a happy hour; the user makes every move. ATOM always returns more value per point than USDC.inj.
 
 This repository is a working simulation. A Go server models the contracts in memory and serves a web UI. Skip:Go routes, prices and transaction hashes are simulated; nothing is sent on-chain.
 
@@ -287,26 +287,33 @@ Platform break-even: `monthly fixed cost / (0.005 - gas cost per payment / avera
 
 ## Agent
 
-The agent advises; the user decides. It never redeems POINT, moves funds or changes limits. Every redemption is confirmed and signed by the user.
+The agent advises; the user decides. It never redeems POINT, moves funds or changes limits. Each suggestion can open the matching screen with values filled in, and the user confirms and signs there.
 
-Policy per user (off-chain):
+After each payment, or when the user presses **Ask agent**, `POST /api/advice` returns three suggestions:
 
-```json
-{
-  "user_address": "inj1user987654321",
-  "authz_max_per_tx_usdc": "50.00",
-  "authz_daily_limit_usdc": "200.00",
-  "use_point_first_on_qr": true,
-  "suggest_redeem_at_points": 500
-}
+| Suggestion | What the agent decides | Inputs |
+| --- | --- | --- |
+| Points | How many POINT to keep for upcoming discounts and how many to redeem, and to which asset | POINT balance, suggestion point, average order, redeem value per asset |
+| Top up | Whether the balance runs short within a week of usual orders, how much to add, and from which chain | Balance, average order, orders per week, USDC held per chain, route fee per chain |
+| Happy hour | One store with extra points worth visiting, preferring stores open now and near the user | Today's merchant happy hours, user area |
+
+How it decides:
+
+1. The server computes the facts above from engine state. Addresses and keys are not included.
+2. If `ANTHROPIC_API_KEY` is set, Claude receives the facts and returns a JSON decision (structured output). The model is `AGENT_MODEL`, default `claude-opus-5-5`, at low effort with server-side refusal fallback.
+3. The server validates the decision: kept + redeemed POINT equals the balance, the asset and chain exist, the top-up is $1-500, and the store has a happy hour today.
+4. Without a key, on timeout (20 s) or on a failed check, rule-based advice is returned instead. The card shows **AI** with the model name or **Rule-based**.
+
+Rule-based baseline: keep POINT worth two average orders; top up to one week of spending, rounded up to $10, from the cheapest chain that holds enough; pick the happy hour scored by open now (+2) and same area (+1).
+
+### Happy hour
+
+A merchant-approved daily window that adds extra POINT (`extra_bps`). The merchant pays it as an extra fee into the Reward Pool, so the pool stays funded:
+
 ```
-
-After each payment:
-
-| POINT balance | Agent action |
-| --- | --- |
-| Below the suggestion point | Shows how many POINT remain and the discount available on the next order |
-| At or above the suggestion point | Shows a card comparing ATOM with USDC.inj; **Review and redeem** opens the Redeem screen with ATOM filled in, **Keep my points** dismisses it |
+earn_bps = point_earn_bps + extra_bps
+fee      = A_usdc * fee_bps / 10000 + A * extra_bps / 10000
+```
 
 ## Skip:Go
 
@@ -358,7 +365,8 @@ Wallet connect reads addresses only. Balances stay simulated and no signature is
 | Session key | Grant, revoke, per-payment and daily limits; daily counters reset when the date changes |
 | Redeem | ATOM, INJ or USDC.inj with boost, daily cap and pool checks; ATOM marked as best value |
 | ATOM preference | ATOM +10%, INJ +5%, USDC.inj 0% with +1% earn on the next payment; boost changes rejected unless ATOM beats USDC.inj after route cost |
-| Agent | After each payment: progress to the suggestion point, or a suggestion card that opens Redeem with ATOM filled in; the user confirms |
+| Agent | Advice on points to keep or redeem, top-up amount and cheapest chain, and a nearby happy hour; Claude when a key is set, rules otherwise; each suggestion opens a pre-filled screen and the user confirms |
+| Happy hour | Merchant-paid extra POINT during a daily window, shown on the POS, receipt and operator store table |
 | Operator | Reward Pool balance, coverage, inflow and outflow totals, daily redeem cap, budget top-up, pause, boost settings, merchant approve/suspend |
 | Wallets | Keplr (`inj1` and `cosmos1`) and MetaMask (`0x` converted to `inj1`), address only |
 | Links | Skip:Go attribution on routed screens; Mintscan link for every simulated contract transaction |
@@ -377,6 +385,7 @@ Wallet connect reads addresses only. Balances stay simulated and no signature is
 | Merchant keys | Generated by the server at startup; in production each POS holds its own private key |
 | Fee split | Merchant fee goes entirely to the Reward Pool; the [target model](#target-model) (platform share, earn on USDC paid, sponsor-funded boost, routing fee, POINT expiry) is not built |
 | Accounts | Demo users are switched from a menu; there are no accounts or logins |
+| Agent inputs | Spending profiles, wallet holdings per chain, areas and happy hours are sample data; wallet balances are not read from chains |
 | Persistence | State resets when the server restarts |
 
 ### Differences from the v2 spec
@@ -399,6 +408,11 @@ go run ./cmd/server
 ```
 
 Open http://127.0.0.1:8080. Use `-addr` to change the listen address.
+
+| Environment variable | Purpose |
+| --- | --- |
+| `ANTHROPIC_API_KEY` | Enables AI advice; without it the agent uses rules |
+| `AGENT_MODEL` | Claude model for advice (default `claude-opus-5-5`) |
 
 Demo path:
 
@@ -430,6 +444,7 @@ web/               Static UI (embedded into the binary)
 | POST | `/api/session` | Grant or revoke the session key |
 | POST | `/api/policy` | Session limits and the agent's suggestion point |
 | POST | `/api/wallet/connect`, `/api/wallet/disconnect` | Use Keplr or MetaMask addresses for a user |
+| POST | `/api/advice` | Agent advice for a user |
 | POST | `/api/qr` | Merchant-signed payment QR |
 | POST | `/api/qr/verify` | QR authentication checks for a scanned payload |
 | POST | `/api/pay/preview` | Payment split without changing state (`qr` payload) |
@@ -453,6 +468,7 @@ Sample data is defined in `internal/engine`:
 | `merchants` (`engine.go`) | Registry entries: status, `fee_bps`, `point_earn_bps`, settlement address |
 | `newUser(...)` calls (`engine.go`) | Demo users, starting Vault balance and POINT |
 | `pool` (`engine.go`) | Starting Reward Pool balance, daily redeem cap and feegrant gas pool |
+| `seedSample` (`advisor.go`) | Sample user areas, spending profiles, USDC per chain, and merchant areas and happy hours |
 | `boostBps` (`engine.go`) | Redemption boost per asset in bps (ATOM must stay above USDC.inj) |
 | `QRTTL`, `RefundWindow` (`types.go`) | QR expiry (120 s) and refund window (10 min) |
 
