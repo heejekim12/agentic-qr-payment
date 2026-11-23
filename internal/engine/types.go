@@ -179,7 +179,9 @@ type TopupQuote struct {
 	Amount int64  `json:"amount_micro"`
 	Fee    int64  `json:"fee_micro"`
 	Out    int64  `json:"out_micro"`
-	// ATOM top-ups arrive as ATOM; AtomOut is Out at AtomUSD.
+	// ATOM top-ups are entered and delivered in ATOM.
+	AtomIn  int64   `json:"atom_in_micro,omitempty"`
+	AtomFee int64   `json:"atom_fee_micro,omitempty"`
 	AtomOut int64   `json:"atom_out_micro,omitempty"`
 	AtomUSD float64 `json:"atom_usd,omitempty"`
 }

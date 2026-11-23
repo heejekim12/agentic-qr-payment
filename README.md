@@ -5,7 +5,7 @@
 ## In short
 
 - **Top up:** USDC.inj on Injective goes straight in. USDC on Base, Ethereum or Solana is routed through [Skip:Go](https://go.skip.build/) into your vault as USDC.inj; ATOM on the Cosmos Hub is moved over IBC and kept as ATOM. You sign the route in your own wallet.
-- **Pay:** The app checks the store's signature on the QR before paying. Pay with USDC.inj, or with ATOM: Skip:Go swaps just enough ATOM to USDC.inj inside the payment, with a 1% slippage limit. A payment-only key you register once (with limits) signs for you, and the platform pays the gas, so there is no popup. The store always receives the full price in USDC.inj in the same transaction, and paying with ATOM earns more store points (+1% in the demo).
+- **Pay:** The app checks the store's signature on the QR before paying. Pay with USDC.inj, or with ATOM: Skip:Go swaps just enough ATOM to USDC.inj inside the payment, with a 1% slippage limit. A payment-only key you register once (with limits) signs for you, and the platform pays the gas, so there is no popup. The store always receives the full price in USDC.inj in the same transaction, and paying with ATOM earns more store points (+2% in the demo).
 - **Points:** Each store gives its own points, usable only as a discount at that store. Points are never converted to coins, and the platform never sends crypto to users or merchants.
 - **Platform revenue:** Skip:Go (our routing service) earns route fees on top-ups and ATOM payment swaps. Merchants: free for KRW 0.3B or less in annual sales, KRW 30,000 a month for KRW 0.3-0.5B. Merchants pay no per-payment fee.
 
@@ -129,8 +129,8 @@ flowchart TB
 | `category` | enum `CAFE`, `BAR`, `RESTAURANT`, `OTHER` | `BAR` |
 | `status` | enum `ACTIVE`, `SUSPENDED` | `ACTIVE` |
 | `settlement_addr` | inj1 address | `inj1abc...xyz` |
-| `point_earn_bps` | u16 | `20` (0.20% of the USDC-paid amount) |
-| `atom_bonus_bps` | u16 | `100` (+1.00% extra when paying with ATOM) |
+| `point_earn_bps` | u16 | `500` (5.00% of the paid amount) |
+| `atom_bonus_bps` | u16 | `200` (+2.00% extra when paying with ATOM) |
 | `pubkey` | ed25519 public key (hex) | `5e916eaa...` |
 
 Only `ACTIVE` merchants can be paid. `pubkey` verifies the merchant's QR signatures. Status changes are signed by the registry admin multisig. The subscription is billed off-chain and is not part of the registry.
@@ -241,8 +241,10 @@ The owner signs `Vault.Withdraw` to send USDC.inj or ATOM back to their own addr
 | Parameter | Demo value |
 | --- | --- |
 | POINT value | 1 POINT = $0.01 off at the issuing store |
-| Earn rate | `point_earn_bps` of the USDC-paid amount: 0.20% (small stores), 0.40% and 0.45% (restaurants); happy hour adds 2-3% of the order |
-| ATOM bonus | `atom_bonus_bps`, +1.00% in the demo, added when paying with ATOM; with the 0.30% swap fee the customer nets +0.70% over USDC.inj |
+| Earn rate | `point_earn_bps` of the paid amount (POINT-paid parts excluded): 5% (cafe, bar), 3% (restaurants); happy hour adds 3% of the order. Set like a stamp card (buy 10, get 1 free is about 9.1%) and above card rewards |
+| ATOM bonus | `atom_bonus_bps`, +2.00% in the demo, set by each store, added when paying with ATOM; with the 0.30% swap fee the customer nets +1.70% over USDC.inj |
+| Example | $5.00 at a cafe paid with ATOM: 5% + 2% = 7%, 35 POINT ($0.35) |
+| Merchant cost | Only when POINT is spent at the store, as a discount; unspent POINT costs nothing |
 | Where it can be spent | Only at the store that gave it |
 | Conversion | None; POINT is never redeemed for coins or cash |
 
@@ -308,7 +310,9 @@ How it decides:
 3. The server validates the decision: the chain exists, the top-up is $1-500, and the store has a happy hour today.
 4. Without a key, on timeout (20 s) or on a failed check, rule-based advice is returned instead. The card shows **AI** with the model name or **Rule-based**.
 
-Rule-based baseline: top up to one week of spending, rounded up to $10, from the cheapest source that holds enough; pick the happy hour scored by open now (+2) and same area (+1).
+Before paying, `POST /api/advice/pay` compares every valid way to pay the scanned order (ATOM or USDC.inj, with or without this store's POINT) using the same checks as the payment, and recommends one by net benefit: discount + earned POINT value - swap cost. The Pay screen shows the rule-based pick at once and replaces it with Claude's pick when it arrives; the server only accepts an option it computed. Apply sets the choice; the user still confirms the payment. No advice is shown after payment.
+
+Rule-based baseline: top up to one week of spending, rounded up to $10, from ATOM on Cosmos Hub if it holds enough, otherwise the cheapest source that holds enough; pick the happy hour scored by open now (+2) and same area (+1).
 
 ### Happy hour
 
@@ -329,7 +333,7 @@ earn_bps = point_earn_bps + extra_bps
 | Pay with ATOM | Exact-out swap ATOM -> USDC.inj on injective-1, output to the merchant's `settlement_addr`, 1% slippage limit | `SkipClient.executeRoute()` inside `Vault.ExecuteQrPayment` |
 | Top up USDC.inj on Injective (default) | Direct deposit, no route | `Vault.DepositUsdc` |
 
-Route fees come from `topupChains` and `atomSwapFeeBps` in `internal/engine/types.go` and are sample values, not live Skip:Go quotes. Top-up amounts, including ATOM, are entered in USD and converted at the ATOM price.
+Route fees come from `topupChains` and `atomSwapFeeBps` in `internal/engine/types.go` and are sample values, not live Skip:Go quotes. USDC top-ups are entered in USD; ATOM top-ups are entered and delivered in ATOM, with the route fee taken in ATOM.
 
 ## Prices
 
@@ -366,14 +370,14 @@ Wallet connect reads addresses only. Balances stay simulated and no signature is
 | --- | --- |
 | Users | Three demo users, each with their own Vault balance (USDC.inj and ATOM), store POINT, session and activity; the home screen lists POINT per store |
 | Top up | Quote and deposit of USDC.inj on Injective (default, direct), USDC on Base, Ethereum or Solana (routed to USDC.inj), or ATOM on Cosmos Hub (kept as ATOM); Skip:Go-style asset picker |
-| Payment | Merchant QR (MPM v2.0) with ed25519 signature, 120 s expiry and one-time `order_id`; preview before paying; pay with USDC.inj or ATOM (Skip:Go swap, 1% slippage limit); store POINT used first as a discount; full price to the merchant in USDC.inj; store POINT minted in the same transaction |
+| Payment | Merchant QR (MPM v2.0) with ed25519 signature, 120 s expiry and one-time `order_id`; preview before paying with the agent's pick of how to pay; pay with USDC.inj or ATOM (Skip:Go swap, 1% slippage limit; ATOM is preselected when the Vault's ATOM covers the order); store POINT used first as a discount; full price to the merchant in USDC.inj; store POINT minted in the same transaction |
 | QR authentication | Five checks shown in the app; a forged QR (amount changed) fails the signature check and is rejected |
 | Rejections | Forged QR, suspended merchant, expired QR, reused order, session per-payment and daily limits, insufficient Vault balance, ATOM price moved past the slippage limit |
 | Screens | One page: customer app (switch demo users from the name at the top), merchant (POS and today's sales with refund) and operator (totals, stores, activity) |
 | Refund | Merchant-signed cancel within 10 minutes; store POINT used is returned, store POINT earned is removed, already-spent earned POINT is deducted from the refund |
 | Withdraw | Owner-signed USDC.inj or ATOM, not affected by session limits |
 | Session key | Grant, revoke, per-payment and daily limits; daily counters reset when the date changes |
-| Agent | Store POINT summary, top-up amount and cheapest source, and a nearby happy hour; Claude when a key is set, rules otherwise; the top-up suggestion opens a pre-filled screen and the user confirms |
+| Agent | Store POINT summary, top-up amount and source (ATOM on Cosmos Hub first), and a nearby happy hour; Claude when a key is set, rules otherwise; the top-up suggestion opens a pre-filled screen and the user confirms |
 | Happy hour | Merchant-approved extra store POINT during a daily window, shown on the POS, receipt and operator store table |
 | Operator | Sales volume, unused POINT, blocked payments, merchant approve/suspend and subscription per store |
 | Wallets | Keplr and MetaMask (`0x` converted to `inj1`), address only |
@@ -448,12 +452,13 @@ web/               Static UI (embedded into the binary); vendor/ holds qrcode-ge
 | Method | Path | Purpose |
 | --- | --- | --- |
 | GET | `/api/state` | Users, merchants, totals, ATOM price and event log |
-| POST | `/api/topup/quote`, `/api/topup` | Top-up quote and deposit into the Vault |
+| POST | `/api/topup/quote`, `/api/topup` | Top-up quote and deposit into the Vault (`amount_usdc` for USDC sources, `amount_atom` for `cosmoshub-4`) |
 | POST | `/api/withdraw` | Owner withdrawal of USDC.inj or ATOM (`asset`) from the Vault |
 | POST | `/api/session` | Grant or revoke the session key |
 | POST | `/api/policy` | Session limits per payment and per day |
 | POST | `/api/wallet/connect`, `/api/wallet/disconnect` | Use Keplr or MetaMask addresses for a user |
 | POST | `/api/advice` | Agent advice for a user |
+| POST | `/api/advice/pay` | How to pay a scanned order (`qr`, `rules_only` for an instant rule-based answer) |
 | POST | `/api/qr` | Merchant-signed payment QR |
 | POST | `/api/qr/verify` | QR authentication checks for a scanned payload |
 | POST | `/api/pay/preview` | Payment split without changing state (`qr`, `use_points`, `pay_with`); for ATOM returns `atom_in_micro` and `atom_max_micro` |

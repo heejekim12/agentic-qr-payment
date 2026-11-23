@@ -3,9 +3,10 @@ package engine
 import "fmt"
 
 type TopupRequest struct {
-	User   int     `json:"user"`
-	Chain  string  `json:"chain"`
-	Amount float64 `json:"amount_usdc"`
+	User       int     `json:"user"`
+	Chain      string  `json:"chain"`
+	Amount     float64 `json:"amount_usdc"` // USDC sources
+	AmountAtom float64 `json:"amount_atom"` // cosmoshub-4: ATOM to send
 }
 
 func quoteTopup(chain string, amount float64) (TopupQuote, error) {
@@ -21,17 +22,26 @@ func quoteTopup(chain string, amount float64) (TopupQuote, error) {
 	return TopupQuote{Chain: chain, Name: r.Name, Denom: r.Denom, Amount: amt, Fee: fee, Out: amt - fee}, nil
 }
 
-// quoteTopupLocked adds the ATOM amount for Cosmos Hub top-ups; caller holds e.mu.
-func (e *Engine) quoteTopupLocked(chain string, amount float64) (TopupQuote, error) {
-	q, err := quoteTopup(chain, amount)
-	if err == nil && q.Denom == "ATOM" {
-		q.AtomUSD = e.atomUSD()
-		q.AtomOut = int64(float64(q.Out) / q.AtomUSD)
+// quoteTopupLocked quotes USDC sources in USD and the Cosmos Hub source in ATOM; caller holds e.mu.
+// USD fields of an ATOM quote are the ATOM amounts at the current price.
+func (e *Engine) quoteTopupLocked(req TopupRequest) (TopupQuote, error) {
+	r, ok := topupChains[req.Chain]
+	if !ok || r.Denom != "ATOM" {
+		return quoteTopup(req.Chain, req.Amount)
 	}
-	return q, err
+	in, err := toMicro(req.AmountAtom)
+	if err != nil {
+		return TopupQuote{}, err
+	}
+	px := e.atomUSD()
+	fee := in * r.FeeBps / 10_000
+	q := TopupQuote{Chain: req.Chain, Name: r.Name, Denom: r.Denom, AtomIn: in, AtomFee: fee, AtomOut: in - fee, AtomUSD: px}
+	q.Amount, q.Fee = int64(float64(in)*px), int64(float64(fee)*px)
+	q.Out = q.Amount - q.Fee
+	return q, nil
 }
 
-// QuoteTopup mirrors SkipClient.route(): USDC -> USDC.inj, or ATOM over IBC; amounts are in USD.
+// QuoteTopup mirrors SkipClient.route(): USDC -> USDC.inj, or ATOM over IBC.
 func (e *Engine) QuoteTopup(req TopupRequest) (TopupQuote, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -39,7 +49,7 @@ func (e *Engine) QuoteTopup(req TopupRequest) (TopupQuote, error) {
 	if err != nil {
 		return TopupQuote{}, err
 	}
-	q, err := e.quoteTopupLocked(req.Chain, req.Amount)
+	q, err := e.quoteTopupLocked(req)
 	if err != nil {
 		return q, err
 	}
@@ -54,7 +64,7 @@ func (e *Engine) Topup(req TopupRequest) (TopupQuote, error) {
 	if err != nil {
 		return TopupQuote{}, err
 	}
-	q, err := e.quoteTopupLocked(req.Chain, req.Amount)
+	q, err := e.quoteTopupLocked(req)
 	if err != nil {
 		return q, err
 	}
@@ -87,6 +97,9 @@ func (e *Engine) Topup(req TopupRequest) (TopupQuote, error) {
 // walletCovers checks the user's (sample) wallet balance on the source chain.
 func walletCovers(u *User, q TopupQuote) error {
 	if have := u.Holdings[q.Chain]; q.Amount > have {
+		if q.Denom == "ATOM" {
+			return errf("ERR_INSUFFICIENT_WALLET", "your %s wallet has %s ATOM", q.Name, FormatAtom(int64(float64(have)/q.AtomUSD)))
+		}
 		return errf("ERR_INSUFFICIENT_WALLET", "your %s wallet has %s %s", q.Name, FormatUSDC(have), q.Denom)
 	}
 	return nil

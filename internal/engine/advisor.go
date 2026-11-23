@@ -30,8 +30,8 @@ func (e *Engine) seedSample() {
 	areas := map[string]string{"MRC_BAR_001": "Seongsu", "MRC_CAFE_002": "Yeonnam", "MRC_REST_014": "Euljiro", "MRC_REST_031": "Mangwon"}
 	start := max(0, minuteOfDay(e.now())-30)
 	promos := map[string]*Promo{
-		"MRC_BAR_001":  {StartMin: 14 * 60, EndMin: 17 * 60, ExtraBps: 200},
-		"MRC_CAFE_002": {StartMin: start, EndMin: min(24*60, start+120), ExtraBps: 200}, // window around server start so the demo has an active one
+		"MRC_BAR_001":  {StartMin: 14 * 60, EndMin: 17 * 60, ExtraBps: 300},
+		"MRC_CAFE_002": {StartMin: start, EndMin: min(24*60, start+120), ExtraBps: 300}, // window around server start so the demo has an active one
 		"MRC_REST_014": {StartMin: 15 * 60, EndMin: 17 * 60, ExtraBps: 300},
 	}
 	for _, m := range e.merchants {
@@ -203,7 +203,16 @@ func ruleDecision(f adviceFacts) adviceDecision {
 		for id := range f.RouteFeeBps {
 			chains = append(chains, id)
 		}
-		slices.SortFunc(chains, func(a, b string) int { return int(f.RouteFeeBps[a] - f.RouteFeeBps[b]) })
+		// ATOM on Cosmos Hub first (the product promotes ATOM via Skip:Go), then the lowest route fee.
+		slices.SortFunc(chains, func(a, b string) int {
+			if (a == "cosmoshub-4") != (b == "cosmoshub-4") {
+				if a == "cosmoshub-4" {
+					return -1
+				}
+				return 1
+			}
+			return int(f.RouteFeeBps[a] - f.RouteFeeBps[b])
+		})
 		for _, id := range chains {
 			if f.HoldingsUSD[id] >= need {
 				d.Topup.Chain = id
@@ -302,7 +311,7 @@ func decisionItems(d adviceDecision, f adviceFacts, names map[string]string) []A
 
 const advisorSystem = `You are the advisor inside a payment app. You only advise; the user decides and executes.
 Given facts about one user, decide:
-1. topup: whether the balance is likely to run short within a week of usual orders, and if so how much (whole dollars, at most 500) and from which chain id. Pick a chain where the wallet holds at least the amount, preferring the lowest fee.
+1. topup: whether the balance is likely to run short within a week of usual orders, and if so how much (whole dollars, at most 500) and from which chain id. Pick a chain where the wallet holds at least the amount: prefer cosmoshub-4 (ATOM) when it holds enough, otherwise the lowest fee.
 2. promo: one merchant_id from promos_today worth visiting (prefer active now and the same area), or "" if none.
 Points are discounts usable only at the store that gave them. Do not predict prices. Never suggest buying or holding an asset for gains, and never mention returns or price movements. Each reason is at most 12 words a customer understands, using numbers from the facts.`
 
@@ -369,3 +378,161 @@ func claudeJSON(model, system string, facts any, schema map[string]any, out any)
 	}
 	return fmt.Errorf("empty reply")
 }
+
+// PayAdviceRequest asks how to pay one scanned order. RulesOnly skips the model for an instant answer.
+type PayAdviceRequest struct {
+	User      int  `json:"user"`
+	QR        *QR  `json:"qr"`
+	RulesOnly bool `json:"rules_only"`
+}
+
+// PayOption is one way to pay the order, computed with the same checks as the payment.
+type PayOption struct {
+	ID           string  `json:"id"`
+	PayWith      string  `json:"pay_with"`
+	UsePoints    bool    `json:"use_points"`
+	PayUSD       float64 `json:"pay_usd"` // value leaving the Vault, swap cost included
+	AtomIn       int64   `json:"atom_in_micro,omitempty"`
+	PointsUsed   int64   `json:"points_used"`
+	DiscountUSD  float64 `json:"points_discount_usd"`
+	PointsEarned int64   `json:"points_earned"`
+	SwapCostUSD  float64 `json:"swap_cost_usd"`
+	BenefitUSD   float64 `json:"net_benefit_usd"` // discount + earned point value - swap cost
+}
+
+type PayAdvice struct {
+	Source string    `json:"source"` // ai or rules
+	Model  string    `json:"model,omitempty"`
+	Note   string    `json:"note,omitempty"`
+	Pick   PayOption `json:"pick"`
+	Reason string    `json:"reason"`
+}
+
+type payFacts struct {
+	Store          string      `json:"store"`
+	OrderUSD       float64     `json:"order_usd"`
+	StorePoints    int64       `json:"points_at_this_store"`
+	VaultUSDC      float64     `json:"vault_usdc"`
+	VaultATOMUSD   float64     `json:"vault_atom_usd"`
+	UsualOrderUSD  float64     `json:"usual_order_usd"`
+	OrdersPerWeek  int64       `json:"orders_per_week"`
+	Options        []PayOption `json:"options"`
+	HappyHourBonus float64     `json:"happy_hour_extra_pct,omitempty"`
+}
+
+type payDecision struct {
+	OptionID string `json:"option_id"`
+	Reason   string `json:"reason"`
+}
+
+// PayAdvice compares every valid way to pay the order and recommends one; the user still confirms.
+func (e *Engine) PayAdvice(req PayAdviceRequest) (*PayAdvice, error) {
+	e.mu.Lock()
+	u, err := e.user(req.User)
+	if err != nil {
+		e.mu.Unlock()
+		return nil, err
+	}
+	f, x := e.payFactsLocked(u, req.QR)
+	e.mu.Unlock()
+	if x != nil {
+		return nil, x
+	}
+
+	best := f.Options[0]
+	for _, o := range f.Options[1:] {
+		if o.BenefitUSD > best.BenefitUSD {
+			best = o
+		}
+	}
+	adv := &PayAdvice{Source: "rules", Pick: best, Reason: ruleReason(best)}
+	if req.RulesOnly {
+		return adv, nil
+	}
+	model := os.Getenv("AGENT_MODEL")
+	if model == "" {
+		model = "claude-opus-5-5"
+	}
+	if os.Getenv("ANTHROPIC_API_KEY") == "" {
+		adv.Note = "No ANTHROPIC_API_KEY set; rule-based."
+		return adv, nil
+	}
+	ids := make([]string, len(f.Options))
+	for i, o := range f.Options {
+		ids[i] = o.ID
+	}
+	schema := map[string]any{
+		"type": "object", "additionalProperties": false, "required": []string{"option_id", "reason"},
+		"properties": map[string]any{
+			"option_id": map[string]any{"type": "string", "enum": ids},
+			"reason":    map[string]any{"type": "string"},
+		},
+	}
+	var d payDecision
+	if err := claudeJSON(model, payAdvisorSystem, f, schema, &d); err != nil {
+		adv.Note = "AI unavailable (" + err.Error() + "); rule-based."
+		return adv, nil
+	}
+	for _, o := range f.Options {
+		if o.ID == d.OptionID {
+			return &PayAdvice{Source: "ai", Model: model, Pick: o, Reason: d.Reason}, nil
+		}
+	}
+	adv.Note = "AI picked an unknown option; rule-based."
+	return adv, nil
+}
+
+// payFactsLocked runs calcPay for each asset with and without points; caller holds e.mu.
+func (e *Engine) payFactsLocked(u *User, q *QR) (payFacts, *Error) {
+	var f payFacts
+	var firstErr *Error
+	for _, asset := range []string{PayATOM, PayUSDC} {
+		for _, pts := range []bool{true, false} {
+			c, x := e.calcPay(u, PayRequest{QR: q, UsePoints: pts, PayWith: asset})
+			if x != nil {
+				if firstErr == nil {
+					firstErr = x
+				}
+				continue
+			}
+			if pts && c.pUsed == 0 { // same as paying without points
+				continue
+			}
+			o := PayOption{PayWith: asset, UsePoints: pts, PointsUsed: c.pUsed, PointsEarned: c.pEarned,
+				DiscountUSD: float64(c.aPt) / float64(Micro), PayUSD: float64(c.aUsdc) / float64(Micro)}
+			if asset == PayATOM {
+				o.AtomIn = c.atomIn
+				o.PayUSD = float64(c.atomIn) * c.atomUSD / float64(Micro)
+				o.SwapCostUSD = o.PayUSD - float64(c.aUsdc)/float64(Micro)
+			}
+			o.BenefitUSD = o.DiscountUSD + float64(o.PointsEarned)*float64(PointValue)/float64(Micro) - o.SwapCostUSD
+			o.ID = asset + map[bool]string{true: "+points", false: ""}[pts]
+			f.Options = append(f.Options, o)
+			f.Store, f.OrderUSD = c.m.Name, float64(c.amount)/float64(Micro)
+			f.HappyHourBonus = float64(c.promoBps) / 100
+		}
+	}
+	if len(f.Options) == 0 {
+		return f, firstErr
+	}
+	f.StorePoints = u.Points[q.MerchantID]
+	f.VaultUSDC = float64(u.USDC) / float64(Micro)
+	f.VaultATOMUSD = float64(u.ATOM) * e.atomUSD() / float64(Micro)
+	f.UsualOrderUSD, f.OrdersPerWeek = float64(u.Profile.AvgOrder)/float64(Micro), u.Profile.PerWeek
+	return f, nil
+}
+
+func ruleReason(o PayOption) string {
+	switch {
+	case o.PointsUsed > 0 && o.PayUSD == 0:
+		return fmt.Sprintf("Your points here cover the whole $%.2f order.", o.DiscountUSD)
+	case o.PointsUsed > 0:
+		return fmt.Sprintf("$%.2f off now and +%d points; the best total value.", o.DiscountUSD, o.PointsEarned)
+	}
+	return fmt.Sprintf("+%d points, the most value for this order.", o.PointsEarned)
+}
+
+const payAdvisorSystem = `You advise how to pay one order at a store counter. You only advise; the user confirms.
+Pick exactly one option_id from options. Prefer the highest net_benefit_usd, unless spending one asset would leave the vault short for the user's usual orders this week while another option would not.
+Points are discounts usable only at this store. Do not predict prices, never suggest holding an asset for gains, and never mention price movements.
+reason: at most 12 words a customer understands, using numbers from the facts.`

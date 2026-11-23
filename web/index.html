@@ -330,8 +330,8 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
         <!-- TOP UP -->
         <div class="screen" id="v-topup" hidden>
           <div class="scr-head"><button class="back" data-go="home" aria-label="Back">&larr;</button><h2>Top up</h2><a class="skip" href="https://go.skip.build/" target="_blank" rel="noopener">by <span class="sg">skip<b>:</b>go</span></a></div>
-          <label class="field">Amount<input id="tu-amt" class="amount-input" type="number" min="1" step="0.01" value="30" inputmode="decimal"></label>
-          <div class="chips"><button data-amt="10">$10</button><button data-amt="30">$30</button><button data-amt="50">$50</button><button data-amt="100">$100</button></div>
+          <label class="field"><span id="tu-unit">Amount ($)</span><input id="tu-amt" class="amount-input" type="number" min="1" step="0.01" value="30" inputmode="decimal"></label>
+          <div class="chips" id="tu-chips"><button data-amt="10">$10</button><button data-amt="30">$30</button><button data-amt="50">$50</button><button data-amt="100">$100</button></div>
           <div class="field"><span>From</span>
             <div class="asset-pick">
               <button id="tu-asset" class="asset-btn" aria-haspopup="listbox" aria-expanded="false"></button>
@@ -462,12 +462,13 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
     ERR_BAD_POLICY: "Check the values and try again.",
   };
   let S = null, cur = 0, qr = null, posPaid = false, timerId = null;
-  let usePts = true, payWith = "USDC_INJ", lastPv = null, payDone = null, advice = {}, tuTimer = null;
+  let usePts = true, payWith = "USDC_INJ", payWithFor = null, payAdvice = {}, lastPv = null, payDone = null, advice = {}, tuTimer = null;
 
   const $ = id => document.getElementById(id);
   const U = () => S.users[cur];
   const fmtU = m => (m / MICRO).toFixed(2);
   const fmtP = p => Number(p).toLocaleString("en-US");
+  const earnNote = r => { const x = [r.atom_bonus_bps && `+${r.atom_bonus_bps / 100}% ATOM`, r.promo_bps && `+${r.promo_bps / 100}% happy hour`].filter(Boolean); return x.length ? ` (incl. ${x.join(", ")})` : ""; };
   const fmtA = m => (Math.floor(m / 10_000) / 100).toFixed(2); // truncated so Max never exceeds the balance
   const atomPx = () => (S.atom_price || {}).usd || 0;
   // Sample wallet holdings are kept as USD value; ATOM is shown as a quantity at the current price.
@@ -600,7 +601,8 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
   function openTopup(amountMicro, chain) {
     payDone = null;
     if (SOURCES.some(x => x.id === chain)) { tuChain = chain; renderAssetPick(); }
-    $("tu-amt").value = (amountMicro / MICRO).toFixed(0);
+    // Advice amounts are in USD; ATOM is pre-filled as the ATOM needed, rounded up.
+    $("tu-amt").value = chain === "cosmoshub-4" && atomPx() ? (Math.ceil(amountMicro / MICRO / atomPx() * 100) / 100).toFixed(2) : (amountMicro / MICRO).toFixed(0);
     go("topup");
   }
 
@@ -651,11 +653,10 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
         <div class="center"><div class="pay-amount">${x.pay_with === "ATOM" ? fmtA(x.atom_in_micro) + " ATOM" : "$" + fmtU(x.paid_micro)}</div><p class="note">paid to ${esc(x.merchant)}${x.pay_with === "ATOM" ? ` · store received $${fmtU(x.paid_micro)} USDC.inj via Skip:Go` : ""}</p></div>
         <div class="lines">
           <span>Order</span><span class="n">$${fmtU(x.amount_micro)}</span>
-          <span>Points used</span><span class="n">−$${fmtU(x.point_discount_micro)}</span>
-          <span class="pt">Points earned${x.atom_bonus_bps ? ` (incl. +${x.atom_bonus_bps / 100}% for ATOM)` : ""}${x.promo_bps ? ` (incl. +${x.promo_bps / 100}% happy hour)` : ""}</span><span class="n pt">+${fmtP(x.points_earned)}</span>
+          ${x.points_used ? `<span>Points used</span><span class="n">−$${fmtU(x.point_discount_micro)}</span>` : ""}
+          <span class="pt">Points earned${earnNote(x)}</span><span class="n pt">+${fmtP(x.points_earned)}</span>
         </div>
         <p class="center">${txLink(x.tx_hash)}</p>
-        ${adviceHTML()}
         <button class="primary block" data-go="home">Done</button>`;
       return;
     }
@@ -664,25 +665,50 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
       return;
     }
     const m = S.merchants.find(v => v.merchant_id === qr.merchant_id) || { name: qr.merchant_id };
+    const u = U();
+    const atomCovers = u.atom_micro / MICRO * atomPx() >= Number(qr.amount_usdc);
+    // Default to ATOM for each new order when the Vault's ATOM covers it; the user can switch.
+    if (payWithFor !== qr.order_id) {
+      payWithFor = qr.order_id;
+      payWith = atomCovers ? "ATOM" : "USDC_INJ";
+    }
+    const preview = (pts, asset) => api("POST", "/api/pay/preview", { user: cur, qr, use_points: pts, pay_with: asset });
     let ver = null, pv = null, err = null;
     try { ver = await api("POST", "/api/qr/verify", { qr }); } catch (e) { ver = null; }
-    try { pv = await api("POST", "/api/pay/preview", { user: cur, qr, use_points: usePts, pay_with: payWith }); } catch (e) { err = e; }
+    try { pv = await preview(usePts, payWith); } catch (e) { err = e; }
     lastPv = pv;
-    const u = U();
+    // Agent advice for this order: rules answer at once, then the AI answer replaces it.
+    const key = cur + ":" + qr.order_id;
+    if (!payAdvice[key]) {
+      payAdvice[key] = { loading: true };
+      const ask = rulesOnly => api("POST", "/api/advice/pay", { user: cur, qr, rules_only: rulesOnly });
+      const show = () => { if (!payDone && qr && cur + ":" + qr.order_id === key && !$("v-pay").hidden) renderPay(); };
+      ask(true).then(r => { if (payAdvice[key].loading) { payAdvice[key] = { ...r, loading: true }; show(); } }).catch(() => {});
+      ask(false).then(r => { payAdvice[key] = r; show(); }).catch(() => { payAdvice[key] = { ...payAdvice[key], loading: false }; show(); });
+    }
+    const a = payAdvice[key], pick = a.pick;
+    const applied = pick && pick.pay_with === payWith && pick.use_points === usePts;
+    const src = a.source === "ai" ? `<span class="pill acc">AI · ${esc(a.model)}</span>` : a.loading ? `<span class="pill mute">AI checking…</span>` : `<span class="pill mute" title="${esc(a.note || "")}">Rule-based</span>`;
+    const tipsHTML = `<div class="agent"><div class="adv-h"><span class="hd">Agent · how to pay</span>${src}</div>` + (pick
+      ? `<div class="adv" style="cursor:default"><span class="tag">${pick.pay_with === "ATOM" ? "ATOM" : "USDC.inj"}</span><span class="t">${pick.pay_usd === 0 ? `Use ${fmtP(pick.points_used)} points, pay nothing` : `${pick.pay_with === "ATOM" ? "Pay with ATOM" : "Pay with USDC.inj"}${pick.points_used ? `, use ${fmtP(pick.points_used)} points (−$${pick.points_discount_usd.toFixed(2)})` : ""} · +${fmtP(pick.points_earned)} P`}</span>${applied ? '<span class="pill ok">Applied</span>' : '<button class="sm" data-pay-advice>Apply</button>'}</div><span class="note">${esc(pick && a.reason)}</span>`
+      : `<p class="note">Checking the best way to pay…</p>`) + `</div>`;
     b.innerHTML = `<div class="merchant-head"><div class="mname">${esc(m.name)}</div>${ver ? verifyHTML(ver) : ""}</div>
       <div class="pay-amount">$${esc(qr.amount_usdc)}</div>
       <div class="row-set"><div><div class="t">Use points</div><p class="note">${fmtP((u.points || {})[qr.merchant_id] || 0)} available at this store</p></div><label class="switch" aria-label="Use points"><input type="checkbox" id="pay-pts" ${usePts ? "checked" : ""}><span></span></label></div>
-      <label class="field">Pay with<select id="pay-with"><option value="USDC_INJ" ${payWith === "USDC_INJ" ? "selected" : ""}>USDC.inj · ${fmtU(u.usdc_micro)}</option><option value="ATOM" ${payWith === "ATOM" ? "selected" : ""}>ATOM · ${fmtA(u.atom_micro)} · +${(m.atom_bonus_bps || 0) / 100}% points</option></select></label>
+      <label class="field">Pay with<select id="pay-with"><option value="ATOM" ${payWith === "ATOM" ? "selected" : ""}>ATOM · ${fmtA(u.atom_micro)} ATOM left · ${((m.point_earn_bps || 0) + (m.atom_bonus_bps || 0)) / 100}% points</option><option value="USDC_INJ" ${payWith === "USDC_INJ" ? "selected" : ""}>USDC.inj · $${fmtU(u.usdc_micro)} left · ${(m.point_earn_bps || 0) / 100}% points</option></select></label>
       ${pv ? `<div class="lines">
         ${pv.points_used ? `<span>Points</span><span class="n">−$${fmtU(pv.point_discount_micro)}</span>` : ""}
         <span class="tot">You pay</span><span class="n tot">${pv.pay_with === "ATOM" ? fmtA(pv.atom_in_micro) + " ATOM" : "$" + fmtU(pv.paid_micro)}</span>
         ${pv.pay_with === "ATOM" ? `<span>Store receives</span><span class="n">$${fmtU(pv.paid_micro)} USDC.inj</span><span>Swap via Skip:Go</span><span class="n">at $${pv.atom_usd.toFixed(2)}, max ${fmtA(pv.atom_max_micro)} ATOM (1%)</span>` : ""}
-        <span class="pt">You earn${pv.atom_bonus_bps ? ` (+${pv.atom_bonus_bps / 100}% for ATOM)` : ""}${pv.promo_bps ? ` (+${pv.promo_bps / 100}% happy hour)` : ""}</span><span class="n pt">+${fmtP(pv.points_earned)} points</span>
+        <span class="pt">You earn${earnNote(pv)}</span><span class="n pt">+${fmtP(pv.points_earned)} points</span>
       </div>` : ""}
       ${err ? `<div class="alert">${esc(friendly(err))}</div>` : ""}
+      ${tipsHTML}
       <button class="primary block" id="pay-go">${pv ? "Pay " + (pv.pay_with === "ATOM" ? fmtA(pv.atom_in_micro) + " ATOM" : "$" + fmtU(pv.paid_micro)) : "Try to pay"}</button>`;
     $("pay-pts").onchange = e => { usePts = e.target.checked; renderPay(); };
     $("pay-with").onchange = e => { payWith = e.target.value; renderPay(); };
+    const ap = b.querySelector("[data-pay-advice]");
+    if (ap) ap.onclick = () => { usePts = pick.use_points; payWith = pick.pay_with; renderPay(); };
     $("pay-go").onclick = doPay;
   }
   async function doPay() {
@@ -730,11 +756,19 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
   renderAssetPick();
   document.querySelectorAll("[data-amt]").forEach(b => b.onclick = () => { $("tu-amt").value = b.dataset.amt; quoteTopup(); });
   $("tu-amt").oninput = () => { clearTimeout(tuTimer); tuTimer = setTimeout(quoteTopup, 400); };
-  const tuReq = () => ({ user: cur, chain: tuChain, amount_usdc: Number($("tu-amt").value) });
+  const tuAtom = () => tuChain === "cosmoshub-4";
+  const tuReq = () => tuAtom() ? { user: cur, chain: tuChain, amount_atom: Number($("tu-amt").value) } : { user: cur, chain: tuChain, amount_usdc: Number($("tu-amt").value) };
+  function renderTopupUnit() {
+    $("tu-unit").textContent = tuAtom() ? "Amount (ATOM)" : "Amount ($)";
+    $("tu-chips").querySelectorAll("[data-amt]").forEach(b => { b.textContent = tuAtom() ? `${b.dataset.amt} ATOM` : `$${b.dataset.amt}`; });
+  }
   async function quoteTopup() {
     try {
+      renderTopupUnit();
       const q = await api("POST", "/api/topup/quote", tuReq());
-      $("tu-quote").innerHTML = `<div class="lines"><span>You send</span><span class="n">${q.denom === "ATOM" ? `ATOM worth $${fmtU(q.amount_micro)}` : `${fmtU(q.amount_micro)} ${esc(q.denom)}`}</span><span>${q.chain === "injective-1" ? "Fee" : "Route fee"}</span><span class="n">−${fmtU(q.fee_micro)}</span><span class="tot">Added to vault</span><span class="n tot">${q.denom === "ATOM" ? fmtA(q.atom_out_micro) + " ATOM" : fmtU(q.out_micro) + " USDC.inj"}</span></div>${q.chain === "injective-1" ? "" : q.denom === "ATOM" ? `<p class="note">Skip:Go moves ATOM to Injective over IBC and deposits it into your vault at $${q.atom_usd.toFixed(2)}. Pay with ATOM at the counter. You sign the route in your own wallet.</p>` : `<p class="note">Skip:Go converts ${esc(q.denom)} to USDC.inj and deposits it into your vault. You sign the route in your own wallet.</p>`}`;
+      $("tu-quote").innerHTML = q.denom === "ATOM"
+        ? `<div class="lines"><span>You send</span><span class="n">${fmtA(q.atom_in_micro)} ATOM</span><span>Route fee</span><span class="n">−${fmtA(q.atom_fee_micro)} ATOM</span><span class="tot">Added to vault</span><span class="n tot">${fmtA(q.atom_out_micro)} ATOM</span></div><p class="note">≈ $${fmtU(q.out_micro)} at ATOM $${q.atom_usd.toFixed(2)}. Skip:Go moves ATOM to Injective over IBC and deposits it into your vault. You sign the route in your own wallet.</p>`
+        : `<div class="lines"><span>You send</span><span class="n">${fmtU(q.amount_micro)} ${esc(q.denom)}</span><span>${q.chain === "injective-1" ? "Fee" : "Route fee"}</span><span class="n">−${fmtU(q.fee_micro)}</span><span class="tot">Added to vault</span><span class="n tot">${fmtU(q.out_micro)} USDC.inj</span></div>${q.chain === "injective-1" ? "" : `<p class="note">Skip:Go converts ${esc(q.denom)} to USDC.inj and deposits it into your vault. You sign the route in your own wallet.</p>`}`;
       $("tu-go").textContent = `Top up ${q.denom === "ATOM" ? fmtA(q.atom_out_micro) + " ATOM" : fmtU(q.out_micro) + " USDC.inj"}`;
       $("tu-go").disabled = false;
     } catch (e) {
