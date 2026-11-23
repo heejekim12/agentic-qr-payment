@@ -59,6 +59,8 @@ type Merchant struct {
 	Status         string `json:"status"`
 	SettlementAddr string `json:"settlement_addr"`
 	FeeBps         int64  `json:"fee_bps"`
+	PoolBps        int64  `json:"pool_bps"` // part of FeeBps that goes to the Reward Pool; the rest is Skip:Go revenue
+	Tier           string `json:"tier"`
 	PointEarnBps   int64  `json:"point_earn_bps"`
 	Received       int64  `json:"received_micro"`
 	PubKey         string `json:"pubkey"` // ed25519 public key that verifies this merchant's QR
@@ -92,6 +94,7 @@ type Stats struct {
 	PointDiscount int64                `json:"point_discount_micro"`
 	Refunds       int                  `json:"refunds"`
 	Refunded      int64                `json:"refunded_micro"`
+	OperatorFees  int64                `json:"operator_fees_micro"`
 	TopUps        int                  `json:"topups"`
 	TopUpVolume   int64                `json:"topup_micro"`
 	PointsMinted  int64                `json:"points_minted"`
@@ -138,6 +141,7 @@ type HistoryEntry struct {
 	PaidUSDC     int64  `json:"-"`
 	Fee          int64  `json:"-"`
 	PointsEarned int64  `json:"-"`
+	PoolFee      int64  `json:"-"`
 }
 
 type User struct {

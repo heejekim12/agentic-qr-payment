@@ -6,7 +6,7 @@
 
 - **Top up:** USDC.inj on Injective goes straight in. USDC on Base, Ethereum or Solana is routed through [Skip:Go](https://go.skip.build/) into your own vault. The platform never holds your funds.
 - **Pay:** The app checks the store's signature on the QR before paying. A payment-only key you register once (with limits) signs for you, and the platform pays the gas, so there is no popup and no fee. Each payment uses your points as a discount and earns new points.
-- **Rewards:** You redeem points for ATOM, USDC.inj or INJ; ATOM is the best value with a +10% bonus. Rewards are paid from a pool funded by merchant fees, never from user balances. The AI agent suggests how many points to keep and redeem, how much to top up and from which chain, and which store nearby gives extra points during a quiet hour.
+- **Rewards:** You redeem points for ATOM, USDC.inj or INJ; ATOM is the best value with a +7% bonus. Rewards are paid from a pool funded by merchant fees, never from user balances. The AI agent suggests how many points to keep and redeem, how much to top up and from which chain, and which store nearby gives extra points during a quiet hour.
 
 This repository is a working demo. A Go server simulates the contracts in memory and serves the web UI. Skip:Go routes, prices and transaction hashes are simulated; nothing is sent on-chain.
 
@@ -119,12 +119,13 @@ flowchart TB
 
 | Field | Type | Example |
 | --- | --- | --- |
-| `merchant_id` | string | `MRC_CAFE_001` |
-| `name` | string | Seongsu Roastery Cafe |
-| `category` | enum `CAFE`, `RESTAURANT`, `OTHER` | `CAFE` |
+| `merchant_id` | string | `MRC_BAR_001` |
+| `name` | string | Seongsu Pub |
+| `category` | enum `CAFE`, `BAR`, `RESTAURANT`, `OTHER` | `BAR` |
 | `status` | enum `ACTIVE`, `SUSPENDED` | `ACTIVE` |
 | `settlement_addr` | inj1 address | `inj1abc...xyz` |
-| `fee_bps` | u16 | `150` (1.5%) |
+| `fee_bps` | u16 | `30` (0.30%, below the card rate for the merchant's tier) |
+| `pool_bps` | u16 | `20` (part of `fee_bps` that goes to the Reward Pool; the rest is Skip:Go revenue) |
 | `point_earn_bps` | u16 | `300` (3.0%) |
 | `pubkey` | ed25519 public key (hex) | `5e916eaa...` |
 
@@ -162,7 +163,7 @@ The merchant POS shows a signed QR (MPM v2.0):
 ```json
 {
   "qr_version": "2.0",
-  "merchant_id": "MRC_CAFE_001",
+  "merchant_id": "MRC_BAR_001",
   "order_id": "ORD_20261123_0042",
   "amount_usdc": "12.50",
   "currency": "USDC.inj",
@@ -200,12 +201,13 @@ Before paying, the app shows four checks from `/api/qr/verify`: store signature,
 
    ```
    fee       = A_usdc * fee_bps / 10000
-   P_earned  = floor(A * (point_earn_bps + extra_bps) / 10000 / 0.01)   # extra_bps only during a happy hour
+   P_earned  = floor((A_usdc * point_earn_bps + A * extra_bps) / 10000 / 0.01)   # extra_bps only during a happy hour
 
    Vault           -A_usdc
    POINT           -P_used (burn), +P_earned (mint)
    Merchant        +(A_usdc - fee) + A_point
-   Reward Pool     +fee - A_point
+   Reward Pool     +pool_fee - A_point        # pool_fee = A_usdc * pool_bps / 10000 (+ happy hour fee)
+   Skip:Go         +fee - pool_fee
    ```
 
 The merchant always receives the full order amount minus the fee; the POINT portion is paid by the Reward Pool.
@@ -220,7 +222,8 @@ The merchant signs `RefundPayment` within 10 minutes of the payment.
 POINT       +P_used (re-mint), -min(P_earned, current POINT) (burn)
 Vault       +A_usdc - (POINT earned but already redeemed) * 0.01
 Merchant    -(A - fee)
-Reward Pool +A_point - fee + (already redeemed POINT) * 0.01
+Reward Pool +A_point - pool_fee + (already redeemed POINT) * 0.01
+Skip:Go     -(fee - pool_fee)
 ```
 
 ### Redeem
@@ -242,8 +245,8 @@ The owner signs `Vault.Withdraw` to send USDC back to their own address. No limi
 | Parameter | Demo value |
 | --- | --- |
 | POINT value | 1 POINT = 0.01 USDC |
-| Earn rate | `point_earn_bps` of the order amount: cafes 3.0%, restaurant 5.0% |
-| Redeem boost | ATOM +10%, INJ +5%, USDC.inj 0% (+1% earn on next payment) |
+| Earn rate | `point_earn_bps` of the USDC-paid amount, equal to the pool share: 0.20% (small stores), 0.40% and 0.45% (restaurants); happy hour adds 2-3% of the order |
+| Redeem boost | ATOM +7%, INJ +3%, USDC.inj 0% (+1% earn on next payment) |
 | Route cost (sample) | ATOM 0.6%, INJ 0.3%, USDC.inj 0% |
 | Daily redeem cap | $50 per user |
 
@@ -251,8 +254,8 @@ Value of 1,000 POINT ($10.00) with demo settings:
 
 | Target | Boost | Route cost | Net value | Amount at sample price |
 | --- | --- | --- | --- | --- |
-| ATOM ($4.80) | +$1.00 | -$0.066 | $10.934 | 2.2779 ATOM |
-| INJ ($9.50) | +$0.50 | -$0.0315 | $10.4685 | 1.1020 INJ |
+| ATOM ($4.80) | +$0.70 | -$0.0642 | $10.6358 | 2.2158 ATOM |
+| INJ ($9.50) | +$0.30 | -$0.0309 | $10.2691 | 1.0810 INJ |
 | USDC.inj | $0 | $0 | $10.00 | 10.00 USDC.inj |
 
 The operator view shows pool coverage: `pool balance / (outstanding POINT * 0.01)`.
@@ -263,41 +266,71 @@ The operator view shows pool coverage: `pool balance / (outstanding POINT * 0.01
 
 | Fee | Payer | Rate | Goes to |
 | --- | --- | --- | --- |
-| Merchant fee | Merchant | 1.5% (cafes), 2.0% (restaurant) of `A_usdc` | Reward Pool |
+| Merchant fee | Merchant | Tiered, below card rates: 0.30% (small stores), 0.60% and 0.70% (restaurants) of `A_usdc` | `pool_bps` to the Reward Pool (0.20%, 0.40%, 0.45%), the rest to Skip:Go |
 | Top-up route fee (sample) | User | Ethereum 0.4%, Solana 0.2%, Base 0.1%, Injective 0% | Route |
 | Redeem route cost (sample) | Reward Pool | ATOM 0.6%, INJ 0.3% | Route |
 | Happy hour fee | Merchant | `extra_bps` of the order amount during the merchant's happy hour | Reward Pool (funds the extra POINT) |
 | Gas | Platform | Per transaction, via feegrant | Validators |
 
-With these settings, a $100 order paid in USDC brings $1.50 into the pool and mints 300 POINT ($3.00) of liability, so the pool needs outside funding.
+The demo uses the target model's tiers. Base earn equals the pool share, so payments alone keep the pool funded; for example a $30 restaurant order (0.60% fee) sends $0.12 to the pool, $0.06 to Skip:Go and mints 12 POINT ($0.12).
 
 ### Target model
 
+Merchant fees are set below the Korean credit card rate for each revenue tier, so accepting this payment is always cheaper than a card.
+
+Korean credit card rates for SMEs are capped by the Financial Services Commission (preferential rates from 2025-02-14). General merchants above KRW 3B in annual sales have no cap; their rates are published by each card issuer.
+
+| Merchant tier (annual sales) | Card rate (credit) | Our merchant fee | Reward Pool share | Skip:Go share | Base POINT earn |
+| --- | --- | --- | --- | --- | --- |
+| Small, KRW 0.3B or less | 0.40% | 0.30% | 0.20% | 0.10% | 0.20% |
+| SME, KRW 0.3-0.5B | 1.00% | 0.60% | 0.40% | 0.20% | 0.40% |
+| SME, KRW 0.5-1B | 1.15% | 0.70% | 0.45% | 0.25% | 0.45% |
+| SME, KRW 1-3B | 1.45% | 0.90% | 0.60% | 0.30% | 0.60% |
+| General, over KRW 3B | Not capped (issuer disclosure) | 1.10% | 0.70% | 0.40% | 0.70% |
+
+Fees are charged on `A_usdc` (the part paid in USDC.inj). The base POINT earn equals the Reward Pool share, and the POINT-paid portion earns nothing, so normal payments never drain the pool.
+
+Other items:
+
 | Item | Rate | Payer | Destination |
 | --- | --- | --- | --- |
-| Merchant fee | 1.5% of `A_usdc` | Merchant | 0.5% platform revenue, 1.0% Reward Pool |
-| POINT earn | 1.0% of `A_usdc` (POINT-paid portion earns nothing) | Reward Pool | User |
-| ATOM boost | +10% of redeemed value | Ecosystem sponsor budget | User |
-| Routing fee | 0.2-0.3% on top-up and redemption swaps | User | Platform, through Skip:Go affiliate fees |
+| ATOM bonus | +7% of redeemed value | Ecosystem sponsor budget | User |
+| INJ bonus | +3% of redeemed value | Ecosystem sponsor budget | User |
+| Happy hour | Extra POINT the merchant chooses (`extra_bps`) | Merchant | User, through the Reward Pool |
+| Skip:Go route fee | 0.2-0.3% on top-up and redemption routes | User (top-up), Reward Pool (redemption) | Skip:Go |
 | POINT expiry | Unused for 12 months | - | Returned to the Reward Pool |
 
 Rules:
 
-- Earn rate never exceeds the pool share of the merchant fee (1.0% <= 1.0%), so normal payments keep the pool solvent.
-- Boosts that steer rewards to ATOM are paid by sponsors who benefit from ATOM inflow, not by the platform.
-- The platform covers servers and feegrant gas from its 0.5% share and routing fees.
+- Merchant fee < card rate in every tier.
+- Base POINT earn = Reward Pool share, so the pool stays funded by payments alone.
+- Asset bonuses are paid by sponsors who benefit from the inflow; ATOM's bonus stays above INJ's so ATOM remains the best value after route cost.
+- Extra rewards beyond the base earn come from merchants (happy hour) or sponsors (asset bonuses), not from Skip:Go.
 
-Example, $10 order paid in USDC:
+Example, $10 order paid in USDC at a small merchant (KRW 0.3B or less):
 
 | Line | Amount |
 | --- | --- |
-| Merchant fee 1.5% | $0.15 |
-| Platform revenue 0.5% | $0.05 |
-| Reward Pool 1.0% | $0.10 |
-| POINT minted (1.0%) | 10 P = $0.10 liability |
-| Merchant receives | $9.85 |
+| Card fee for comparison (0.40%) | $0.040 |
+| Our merchant fee (0.30%) | $0.030 |
+| Reward Pool (0.20%) | $0.020 |
+| Skip:Go (0.10%) | $0.010 |
+| POINT minted (0.20%) | 2 P = $0.02 liability |
+| Merchant receives | $9.970 |
 
-Platform break-even: `monthly fixed cost / (0.005 - gas cost per payment / average order)`.
+Same order at an SME (KRW 0.3-0.5B): fee $0.060 (card $0.100), Reward Pool $0.040, Skip:Go $0.020, 4 P minted, merchant receives $9.940.
+
+Skip:Go break-even per month:
+
+```
+fixed cost <= orders x (avg order x Skip:Go share - gas per payment) + route volume x route fee
+```
+
+For example, with a $10 average order, a 0.20% Skip:Go share and gas ignored, each payment earns $0.02. A $200 monthly server cost needs 10,000 payments ($100,000 GMV) from merchant fees alone, or less with route fees on top-ups and redemptions.
+
+The base earn (0.2-0.7%) is small by design to keep merchant fees below card rates. The consumer's larger rewards come from happy hours and asset bonuses.
+
+For comparison, Zero Pay (Korea's government-backed QR payment) charges 0% to small merchants up to KRW 0.8B in annual sales, so this model does not compete on fee alone at that tier; it competes on self-custody, instant on-chain settlement and asset rewards.
 
 ### Merchant value
 
@@ -385,7 +418,7 @@ Wallet connect reads addresses only. Balances stay simulated and no signature is
 | Withdraw | Owner-signed, not affected by session limits or a pool pause |
 | Session key | Grant, revoke, per-payment and daily limits; daily counters reset when the date changes |
 | Redeem | ATOM, INJ or USDC.inj with boost, daily cap and pool checks; ATOM marked as best value |
-| ATOM preference | ATOM +10%, INJ +5%, USDC.inj 0% with +1% earn on the next payment; boost changes rejected unless ATOM beats USDC.inj after route cost; the Redeem screen shows each bonus and the net gain over USDC.inj (for example ATOM +10% bonus, +9.3% vs USDC.inj) |
+| ATOM preference | ATOM +7%, INJ +3%, USDC.inj 0% with +1% earn on the next payment; boost changes rejected unless ATOM beats USDC.inj after route cost; the Redeem screen shows each bonus and the net gain over USDC.inj (for example ATOM +7% bonus, +6.4% vs USDC.inj) |
 | Agent | Advice on points to keep or redeem, top-up amount and cheapest chain, and a nearby happy hour; Claude when a key is set, rules otherwise; each suggestion opens a pre-filled screen and the user confirms |
 | Happy hour | Merchant-paid extra POINT during a daily window, shown on the POS, receipt and operator store table |
 | Operator | Reward Pool balance, coverage, inflow and outflow totals, daily redeem cap, budget top-up, pause, boost settings, merchant approve/suspend |
@@ -404,7 +437,7 @@ Wallet connect reads addresses only. Balances stay simulated and no signature is
 | MetaMask and ATOM | MetaMask has no `cosmos1` address; ATOM goes to the demo address |
 | QR | Merchant-presented only; the QR is a drawn pattern, not scannable; no camera scanner; no customer-presented (CPM) QR |
 | Merchant keys | Generated by the server at startup; in production each POS holds its own private key |
-| Fee split | Merchant fee goes entirely to the Reward Pool; the [target model](#target-model) (platform share, earn on USDC paid, sponsor-funded boost, routing fee, POINT expiry) is not built |
+| Fee model | Tiered fees and the pool/Skip:Go split are built; Skip:Go route fees, sponsor funding of bonuses (bonuses are paid from the pool) and POINT expiry are not |
 | Accounts | Demo users are switched from a menu; there are no accounts or logins |
 | Agent inputs | Spending profiles, wallet holdings per chain, areas and happy hours are sample data; wallet balances are not read from chains |
 | Persistence | State resets when the server restarts |
@@ -413,12 +446,12 @@ Wallet connect reads addresses only. Balances stay simulated and no signature is
 
 | Item | v2 spec | Demo |
 | --- | --- | --- |
-| Redeem boost | ATOM +5%, INJ +5% | ATOM +10%, INJ +5%, so ATOM is the best value |
+| Redeem boost | ATOM +5%, INJ +5% | ATOM +7%, INJ +3%, so ATOM stays the best value after route cost |
 | Boost rule | Not defined | Boost changes rejected unless ATOM's net value per POINT exceeds USDC.inj |
 | Session limits | `x/authz` delegation | Limits enforced in the Vault contract; `x/feegrant` pays gas |
 | Pause | Not defined | Pauses the Reward Pool only; Vault payments without POINT and withdrawals keep working |
 | Refund | Not defined | Merchant-signed, 10-minute window |
-| Earn base | Total order amount | Same as spec (total order amount); the target model moves it to USDC paid |
+| Earn base | Total order amount | USDC-paid amount, so POINT-paid parts earn nothing (happy hour extra applies to the whole order) |
 
 ## Run
 

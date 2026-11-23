@@ -413,6 +413,7 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
           <div class="meter"><i id="rp-m"></i></div>
           <span>In: merchant fees</span><span class="n" id="rp-in"></span>
           <span>Out: discounts and redemptions</span><span class="n" id="rp-out"></span>
+          <span>Skip:Go fee revenue (outside the pool)</span><span class="n" id="op-rev"></span>
         </div>
         <div class="row">
           <label class="field">Daily redeem cap per user ($)<input id="rp-cap" type="number" min="1" step="1" value="50"></label>
@@ -422,9 +423,9 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
         <details class="more">
           <summary>Redeem bonus</summary>
           <div class="g3" style="margin-top:10px">
-            <label class="field">ATOM %<input id="bs-atom" type="number" min="0" max="50" step="1" value="10"></label>
+            <label class="field">ATOM %<input id="bs-atom" type="number" min="0" max="50" step="1" value="7"></label>
             <label class="field">USDC.inj %<input id="bs-usdc" type="number" min="0" max="50" step="1" value="0"></label>
-            <label class="field">INJ %<input id="bs-inj" type="number" min="0" max="50" step="1" value="5"></label>
+            <label class="field">INJ %<input id="bs-inj" type="number" min="0" max="50" step="1" value="3"></label>
           </div>
           <p class="note" style="margin-top:6px">ATOM must stay the best value after route cost.</p>
           <p class="err" id="bs-err" hidden></p>
@@ -877,7 +878,7 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
     $("md-status").innerHTML = (m.promo ? `<span class="pill acc">Happy hour ${promoText(m.promo)}</span> ` : "") + (m.status === "ACTIVE" ? '<span class="pill ok">Approved</span>' : '<span class="pill bad">Suspended</span>');
     $("md-kpis").innerHTML =
       kpi("Sales", "$" + fmtU(m.sales_micro), plural(m.orders, "order")) +
-      kpi("Received", "$" + fmtU(m.received_micro), `after ${(m.fee_bps / 100).toFixed(1)}% fee`);
+      kpi("Received", "$" + fmtU(m.received_micro), `after ${(m.fee_bps / 100).toFixed(2)}% fee`);
     const pays = [];
     S.users.forEach((u, ui) => u.history.forEach(h => { if (h.type === "PAY" && h.merchant_id === id) pays.push({ ...h, who: u.name, ui }); }));
     pays.sort((a, b) => new Date(b.time) - new Date(a.time));
@@ -924,10 +925,11 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
     $("rp-in").textContent = "+$" + fmtU(p.fees_in_micro);
     $("rp-out").textContent = "−$" + fmtU(p.discount_out_micro + p.redeem_out_micro);
     $("rp-pause").textContent = p.paused ? "Resume rewards" : "Pause rewards";
+    $("op-rev").textContent = "$" + fmtU(st.operator_fees_micro);
 
     const stores = [...S.merchants].sort((a, b) => b.sales_micro - a.sales_micro);
     $("op-stores").innerHTML = `<thead><tr><th>Store</th><th>Status</th><th>Happy hour</th><th class="n">Orders</th><th class="n">Sales</th><th class="n">Fee</th></tr></thead><tbody>` +
-      stores.map(m => `<tr><td>${esc(m.name)}</td><td><button class="sm" data-m="${esc(m.merchant_id)}"><span class="pill ${m.status === "ACTIVE" ? "ok" : "bad"}">${m.status === "ACTIVE" ? "Approved" : "Suspended"}</span></button></td><td>${m.promo ? promoText(m.promo) : "–"}</td><td class="n">${m.orders}</td><td class="n">$${fmtU(m.sales_micro)}</td><td class="n">${(m.fee_bps / 100).toFixed(1)}%</td></tr>`).join("") + `</tbody>`;
+      stores.map(m => `<tr><td>${esc(m.name)}</td><td><button class="sm" data-m="${esc(m.merchant_id)}"><span class="pill ${m.status === "ACTIVE" ? "ok" : "bad"}">${m.status === "ACTIVE" ? "Approved" : "Suspended"}</span></button></td><td>${m.promo ? promoText(m.promo) : "–"}</td><td class="n">${m.orders}</td><td class="n">$${fmtU(m.sales_micro)}</td><td class="n" title="${esc(m.tier)} · pool ${(m.pool_bps / 100).toFixed(2)}%">${(m.fee_bps / 100).toFixed(2)}%</td></tr>`).join("") + `</tbody>`;
     $("op-stores").querySelectorAll("[data-m]").forEach(b => b.onclick = async () => { await api("POST", "/api/merchants/status", { merchant_id: b.dataset.m }).catch(() => {}); await refresh(); });
 
     const rows = Object.entries(st.rejected).sort((a, b) => b[1] - a[1]);

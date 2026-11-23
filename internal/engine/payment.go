@@ -129,6 +129,7 @@ type payCalc struct {
 	m                              *Merchant
 	amount, pUsed, aPt, aUsdc, fee int64
 	earnBps, pEarned, promoBps     int64
+	poolFee                        int64
 	bonus                          bool
 }
 
@@ -179,13 +180,16 @@ func (e *Engine) calcPay(u *User, req PayRequest) (*payCalc, *Error) {
 		return nil, errf("ERR_POOL_INSUFFICIENT", "Reward Pool cannot cover the POINT discount")
 	}
 	c.fee = c.aUsdc * m.FeeBps / 10_000
+	c.poolFee = c.aUsdc * m.PoolBps / 10_000
 	if m.Promo != nil && promoActive(m.Promo, e.now()) {
 		// Happy-hour points are paid by the merchant as an extra fee into the Reward Pool.
 		c.promoBps = m.Promo.ExtraBps
 		c.fee += c.amount * c.promoBps / 10_000
+		c.poolFee += c.amount * c.promoBps / 10_000
 	}
 	c.earnBps = m.PointEarnBps + u.NextEarnBonusBps + c.promoBps
-	c.pEarned = c.amount * c.earnBps / 10_000 / PointValue
+	// Base earn applies to the USDC-paid part only; happy-hour points apply to the whole order.
+	c.pEarned = (c.aUsdc*(c.earnBps-c.promoBps) + c.amount*c.promoBps) / 10_000 / PointValue
 	c.bonus = u.NextEarnBonusBps > 0
 	return c, nil
 }
@@ -244,8 +248,9 @@ func (e *Engine) Pay(req PayRequest) (*PayResult, error) {
 	if s.Active {
 		s.SpentToday += c.aUsdc
 	}
-	e.pool.Balance += c.fee - c.aPt
-	e.pool.FeesIn += c.fee
+	e.pool.Balance += c.poolFee - c.aPt
+	e.pool.FeesIn += c.poolFee
+	e.stats.OperatorFees += c.fee - c.poolFee
 	e.pool.DiscountOut += c.aPt
 	e.pool.GasINJ = max(0, e.pool.GasINJ-gasPerTxINJ)
 	c.m.Received += c.aUsdc - c.fee + c.aPt
@@ -265,7 +270,7 @@ func (e *Engine) Pay(req PayRequest) (*PayResult, error) {
 		Type: "PAY", Status: "PAID", Desc: c.m.Name,
 		Note:  fmt.Sprintf("%d P used · +%d P earned", c.pUsed, c.pEarned),
 		Delta: "-" + FormatUSDC(c.aUsdc), OrderID: c.q.OrderID, MerchantID: c.m.ID,
-		Amount: c.amount, PointsUsed: c.pUsed, PaidUSDC: c.aUsdc, Fee: c.fee, PointsEarned: c.pEarned,
+		Amount: c.amount, PointsUsed: c.pUsed, PaidUSDC: c.aUsdc, Fee: c.fee, PoolFee: c.poolFee, PointsEarned: c.pEarned,
 	})
 	e.log("ok", signer, "Vault.ExecuteQrPayment", fmt.Sprintf(
 		"%s · %s · registry %s ACTIVE · sig/expiry/order ok · session limits ok\nburn %d POINT (pool pays $%s) · Vault -%s · merchant +%s · pool fee +%s · mint %d POINT",
@@ -311,8 +316,9 @@ func (e *Engine) Refund(req RefundRequest) error {
 	u.Points += h.PointsUsed - claw
 	u.USDC += refund
 	u.Session.SpentToday = max(0, u.Session.SpentToday-h.PaidUSDC)
-	e.pool.Balance += h.PointsUsed*PointValue - h.Fee + short*PointValue
-	e.pool.FeesIn -= h.Fee
+	e.pool.Balance += h.PointsUsed*PointValue - h.PoolFee + short*PointValue
+	e.pool.FeesIn -= h.PoolFee
+	e.stats.OperatorFees -= h.Fee - h.PoolFee
 	e.pool.DiscountOut -= h.PointsUsed * PointValue
 	m.Received -= h.Amount - h.Fee
 	m.Refunds++
