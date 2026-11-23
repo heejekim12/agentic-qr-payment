@@ -57,11 +57,11 @@ func (e *Engine) Topup(req TopupRequest) (TopupQuote, error) {
 	e.stats.TopUps++
 	e.stats.TopUpVolume += q.Out
 	if q.Chain == "injective-1" {
-		e.addHistory(u, &HistoryEntry{Type: "TOPUP", Status: "DONE", Credit: true, Desc: "From Injective wallet", Delta: "+" + FormatUSDC(q.Out)})
+		e.addHistory(u, &HistoryEntry{Type: "TOPUP", Status: "DONE", Credit: true, Desc: "From Injective wallet", Delta: "+" + FormatUSDC(q.Out) + " " + PayCurrency})
 		e.log("ok", u.Addr+" (wallet)", "Vault.DepositUsdc", fmt.Sprintf("%s Vault +%s USDC (direct deposit)", u.Name, FormatUSDC(q.Out)))
 		return q, nil
 	}
-	e.addHistory(u, &HistoryEntry{Type: "TOPUP", Status: "DONE", Credit: true, Desc: "USDC on " + q.Name + " via Skip:Go", Delta: "+" + FormatUSDC(q.Out)})
+	e.addHistory(u, &HistoryEntry{Type: "TOPUP", Status: "DONE", Credit: true, Desc: "USDC on " + q.Name + " via Skip:Go", Delta: "+" + FormatUSDC(q.Out) + " " + PayCurrency})
 	e.log("skip", u.Name+" wallet", "SkipClient.executeRoute()", fmt.Sprintf("signed on %s (%s); post-route action Vault.DepositUsdc for %s", q.Name, q.Chain, u.Addr))
 	e.log("ok", "Skip:Go relayer", "Vault.DepositUsdc", fmt.Sprintf("%s Vault +%s USDC", u.Name, FormatUSDC(q.Out)))
 	return q, nil
@@ -97,7 +97,7 @@ func (e *Engine) Withdraw(req WithdrawRequest) error {
 	}
 	e.newTx()
 	u.USDC -= amt
-	e.addHistory(u, &HistoryEntry{Type: "WITHDRAW", Status: "DONE", Desc: "Vault -> " + u.Addr, Delta: "-" + FormatUSDC(amt)})
+	e.addHistory(u, &HistoryEntry{Type: "WITHDRAW", Status: "DONE", Desc: "Vault -> " + u.Addr, Delta: "-" + FormatUSDC(amt) + " " + PayCurrency})
 	e.log("ok", u.Addr+" (wallet)", "Vault.Withdraw", fmt.Sprintf("%s · %s USDC.inj -> owner. Session keys cannot call this.", u.Name, FormatUSDC(amt)))
 	return nil
 }

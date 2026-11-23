@@ -101,11 +101,10 @@ func (e *Engine) redeem(u *User, points int64, a Asset, source string) (RedeemQu
 		u.ATOM += q.Amount
 		route = "Skip Go injective-1 USDC.inj -> cosmoshub-4 uatom, IBC to " + u.CosmosAddr
 		note = "boost +$" + FormatUSDC(q.Boost)
-		note = "boost +$" + FormatUSDC(q.Boost)
 	}
 	e.addHistory(u, &HistoryEntry{
-		Type: "REDEEM", Status: "DONE", Desc: fmt.Sprintf("%d P -> %s %s", points, fmtAmount(a, q.Amount), q.Label),
-		Note: note, Delta: fmt.Sprintf("-%d P", points),
+		Type: "REDEEM", Status: "DONE", Desc: fmt.Sprintf("%d points -> %s %s", points, fmtAmount(a, q.Amount), q.Label),
+		Note: note, Delta: fmt.Sprintf("-%d points", points),
 	})
 	e.log("skip", signer, "RewardPool.RedeemPoints", fmt.Sprintf("%s · %s · burn %d POINT · pool out $%s (boost $%s)\n%s · out %s %s",
 		u.Name, source, points, FormatUSDC(q.Gross), FormatUSDC(q.Boost), route, fmtAmount(a, q.Amount), q.Label))

@@ -273,7 +273,7 @@ func (e *Engine) Pay(req PayRequest) (*PayResult, error) {
 	e.addHistory(u, &HistoryEntry{
 		Type: "PAY", Status: "PAID", Desc: c.m.Name,
 		Note:  fmt.Sprintf("%d P used · +%d P earned", c.pUsed, c.pEarned),
-		Delta: "-" + FormatUSDC(c.aUsdc), OrderID: c.q.OrderID, MerchantID: c.m.ID,
+		Delta: "-" + FormatUSDC(c.aUsdc) + " " + PayCurrency, OrderID: c.q.OrderID, MerchantID: c.m.ID,
 		Amount: c.amount, PointsUsed: c.pUsed, PaidUSDC: c.aUsdc, Fee: c.fee, PoolFee: c.poolFee, PointsEarned: c.pEarned,
 	})
 	e.log("ok", signer, "Vault.ExecuteQrPayment", fmt.Sprintf(
@@ -336,7 +336,7 @@ func (e *Engine) Refund(req RefundRequest) error {
 	if short > 0 {
 		note += fmt.Sprintf(" · %d P already redeemed, -$%s from refund", short, FormatUSDC(short*PointValue))
 	}
-	e.addHistory(u, &HistoryEntry{Type: "REFUND", Status: "DONE", Credit: true, Desc: "Refund · " + m.Name, Note: note, Delta: "+" + FormatUSDC(refund)})
+	e.addHistory(u, &HistoryEntry{Type: "REFUND", Status: "DONE", Credit: true, Desc: "Refund · " + m.Name, Note: note, Delta: "+" + FormatUSDC(refund) + " " + PayCurrency})
 	e.log("ok", m.ID+" (merchant key)", "Vault.RefundPayment", fmt.Sprintf(
 		"%s · %s · merchant returns $%s · pool returns fee $%s · Vault +%s · POINT +%d -%d",
 		u.Name, h.OrderID, FormatUSDC(h.Amount-h.Fee), FormatUSDC(h.Fee), FormatUSDC(refund), h.PointsUsed, claw))
