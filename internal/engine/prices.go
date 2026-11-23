@@ -39,6 +39,7 @@ func (e *Engine) StartPriceFeed(ctx context.Context) {
 			if err := e.refreshPrices(ctx); err != nil {
 				log.Printf("price feed: %v (keeping previous prices)", err)
 			}
+			e.maybeBoost()
 			select {
 			case <-ctx.Done():
 				return

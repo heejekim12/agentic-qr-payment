@@ -32,6 +32,8 @@ type Engine struct {
 	curTx        string
 	stats        Stats
 	prices       map[Asset]PriceInfo
+	boostState   BoostState
+	prevBoost    map[Asset]int64
 }
 
 func New() *Engine {
@@ -174,6 +176,7 @@ type state struct {
 	Events    []Event             `json:"events"`
 	Stats     Stats               `json:"stats"`
 	Prices    map[Asset]PriceInfo `json:"prices"`
+	Boost     BoostState          `json:"boost"`
 }
 
 // StateJSON returns the full simulated chain state.
@@ -190,5 +193,5 @@ func (e *Engine) StateJSON() ([]byte, error) {
 			h.Refundable = h.Type == "PAY" && h.Status == "PAID" && now.Sub(h.Time) < RefundWindow
 		}
 	}
-	return json.Marshal(state{Users: e.users, Merchants: e.merchants, Pool: pv, BoostBps: e.boostBps, Events: e.events, Stats: e.stats, Prices: e.prices})
+	return json.Marshal(state{Users: e.users, Merchants: e.merchants, Pool: pv, BoostBps: e.boostBps, Events: e.events, Stats: e.stats, Prices: e.prices, Boost: e.boostState})
 }

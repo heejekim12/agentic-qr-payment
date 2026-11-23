@@ -62,13 +62,6 @@ header.top .sub { color: var(--muted); margin: 2px 0 0; }
 .nc { font-family: var(--f-mono); font-size: 11px; color: var(--ok); border: 1px solid var(--ok); border-radius: 6px; padding: 3px 8px; }
 .nc-in { color: var(--ok); }
 .sim { font-family: var(--f-mono); font-size: 11px; color: var(--warn); border: 1px solid var(--warn); border-radius: 6px; padding: 3px 8px; }
-.demo-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; background: var(--panel); border: 1px dashed var(--line); border-radius: 14px; padding: 10px 14px; margin-bottom: 18px; }
-.demo-bar .lbl { font-family: var(--f-mono); font-size: 11px; color: var(--warn); letter-spacing: .06em; }
-.demo-bar label { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
-.demo-bar select { width: auto; padding: 6px 10px; font-family: var(--f-body); font-weight: 600; }
-.demo-bar ol { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 0 0 0 auto; padding: 0; list-style: none; counter-reset: s; font-size: 12.5px; color: var(--muted); }
-.demo-bar ol li { counter-increment: s; }
-.demo-bar ol li::before { content: counter(s) ". "; color: var(--accent); font-weight: 700; }
 .banner { background: var(--bad-soft); color: var(--bad); border-radius: 12px; padding: 10px 14px; font-size: 13px; margin-bottom: 16px; }
 
 /* columns */
@@ -90,7 +83,8 @@ header.top .sub { color: var(--muted); margin: 2px 0 0; }
 /* phone */
 .phone { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: 28px; padding: 18px 18px 22px; min-height: 640px; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 .phone-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-.hello { font-family: var(--f-display); font-size: 17px; font-weight: 600; }
+.hello { font-family: var(--f-display); font-size: 17px; font-weight: 600; display: flex; align-items: center; gap: 4px; }
+.hello select { width: auto; background: transparent; border: 0; padding: 0 18px 0 0; font: inherit; color: var(--fg); cursor: pointer; }
 .wallet { position: relative; }
 .chip { display: inline-flex; align-items: center; gap: 6px; background: var(--ok-soft); color: var(--ok); border: 0; border-radius: 999px; padding: 6px 12px; font-size: 12.5px; font-family: var(--f-mono); }
 .menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 5; background: var(--panel-3); border: 1px solid var(--line); border-radius: 12px; padding: 6px; display: flex; flex-direction: column; gap: 4px; min-width: 210px; box-shadow: 0 10px 30px rgba(0,0,0,.4); }
@@ -132,6 +126,8 @@ header.top .sub { color: var(--muted); margin: 2px 0 0; }
 .agent { border: 1px solid var(--accent); background: var(--accent-soft); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
 .agent .hd { font-size: 12px; font-weight: 600; color: var(--accent); }
 .agent p { margin: 0; }
+.bonus-ai { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--line); padding-top: 12px; }
+.bonus-ai .t { font-weight: 600; }
 .adv { display: flex; flex-direction: column; gap: 2px; padding-top: 10px; border-top: 1px solid rgba(143,155,255,.25); }
 .adv-h { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .adv .t { font-weight: 600; font-size: 13.5px; }
@@ -251,17 +247,6 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
     <div class="hdr-r"><span class="nc">NON-CUSTODIAL</span><span class="sim">SIMULATION · NO ON-CHAIN TX</span></div>
   </header>
 
-  <div class="demo-bar" aria-label="Demo controls">
-    <span class="lbl">DEMO CONTROLS</span>
-    <label for="user-sel">Acting as <select id="user-sel"></select></label>
-    <button id="demo-forge" class="sm danger" disabled>Forge current QR ($1.00)</button>
-    <ol>
-      <li>Show a QR on the POS</li>
-      <li>Pay in the app</li>
-      <li>Redeem points for ATOM</li>
-    </ol>
-  </div>
-
   <div id="paused" class="banner" hidden>Rewards are paused. Payments without points and withdrawals still work.</div>
 
   <div class="stage">
@@ -270,7 +255,7 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
       <div class="col-h"><span>Customer</span><span>app</span></div>
       <div class="phone" aria-label="Customer app">
         <div class="phone-top">
-          <span class="hello" id="hello"></span>
+          <label class="hello" for="user-sel">Hi, <select id="user-sel" aria-label="Demo user"></select></label>
           <div class="wallet">
             <button id="w-open" class="sm primary">Connect wallet</button>
             <button id="w-chip" class="chip" hidden><span id="w-chip-label"></span></button>
@@ -433,17 +418,11 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
           <button id="rp-apply" class="sm">Apply</button>
         </div>
         <div class="row"><button id="rp-fund" class="sm">Add $200 budget</button><button id="rp-pause" class="sm danger">Pause rewards</button></div>
-        <details class="more">
-          <summary>Redeem bonus</summary>
-          <div class="g3" style="margin-top:10px">
-            <label class="field">ATOM %<input id="bs-atom" type="number" min="0" max="50" step="1" value="7"></label>
-            <label class="field">USDC.inj %<input id="bs-usdc" type="number" min="0" max="50" step="1" value="0"></label>
-            <label class="field">INJ %<input id="bs-inj" type="number" min="0" max="50" step="1" value="3"></label>
-          </div>
-          <p class="note" style="margin-top:6px">ATOM must stay the best value after route cost.</p>
-          <p class="err" id="bs-err" hidden></p>
-          <button id="bs-save" class="sm" style="margin-top:8px">Apply bonus</button>
-        </details>
+        <div class="bonus-ai">
+          <div class="adv-h"><span class="t">Redeem bonus</span><span id="bs-src"></span></div>
+          <div class="kv"><span>ATOM</span><span class="n" id="bs-atom"></span><span>INJ</span><span class="n" id="bs-inj"></span><span>USDC.inj</span><span class="n">0%</span></div>
+          <p class="note" id="bs-reason"></p>
+        </div>
       </div>
 
       <div class="card">
@@ -560,7 +539,6 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
   function render() {
     const u = U();
     $("user-sel").innerHTML = S.users.map((x, i) => `<option value="${i}" ${i === cur ? "selected" : ""}>${esc(x.name)}</option>`).join("");
-    $("hello").textContent = "Hi, " + u.name;
     renderWallet();
     $("bal-usdc").textContent = "$" + fmtU(u.usdc_micro);
     $("bal-assets").textContent = `${u.atom.toFixed(4)} ATOM · ${u.inj.toFixed(4)} INJ`;
@@ -574,7 +552,6 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
     renderMerchant();
     renderOperator();
     $("paused").hidden = !S.pool.paused;
-    $("demo-forge").disabled = !qr || posPaid;
   }
 
   function renderWallet() {
@@ -777,7 +754,8 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
     $("rd-avail").textContent = `${fmtP(u.points)} available`;
     const pr = S.prices || {};
     const src = pr.ATOM && pr.ATOM.source === "coingecko" ? `CoinGecko, updated ${hhmm(pr.ATOM.updated)}` : "sample prices (live feed unavailable)";
-    $("rd-price").textContent = pr.ATOM ? `ATOM $${pr.ATOM.usd.toFixed(3)} · INJ $${pr.INJ.usd.toFixed(2)} · ${src}` : "";
+    const nx = S.boost && S.boost.next_update ? ` · bonus fixed until ${hhmm(S.boost.next_update)} KST` : "";
+    $("rd-price").textContent = pr.ATOM ? `ATOM $${pr.ATOM.usd.toFixed(3)} · INJ $${pr.INJ.usd.toFixed(2)} · ${src}${nx}` : "";
     let rows;
     try { rows = await api("GET", "/api/redeem/quote?points=" + p); }
     catch (e) { $("rd-opts").innerHTML = `<div class="alert">${esc(friendly(e))}</div>`; $("rd-go").disabled = true; return; }
@@ -883,16 +861,8 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
     $("pos-qr").hidden = false; $("pos-details").hidden = false;
     $("pos-qr").dataset.exp = p.expires_at;
     showQr(p);
-    $("demo-forge").disabled = false;
     clearInterval(timerId); posTick(); timerId = setInterval(posTick, 1000);
     toast("QR ready. Tap Pay in the app.");
-  };
-  $("demo-forge").onclick = () => {
-    if (!qr) return;
-    qr = { ...qr, amount_usdc: "1.00" };
-    $("demo-forge").disabled = true;
-    showQr(qr);
-    toast("QR forged: amount set to $1.00. Try to pay it.", "bad");
   };
 
   // ---------- merchant: today ----------
@@ -950,6 +920,11 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
     $("rp-in").textContent = "+$" + fmtU(p.fees_in_micro);
     $("rp-out").textContent = "−$" + fmtU(p.discount_out_micro + p.redeem_out_micro);
     $("rp-pause").textContent = p.paused ? "Resume rewards" : "Pause rewards";
+    const bo = S.boost || {};
+    $("bs-atom").textContent = "+" + (S.boost_bps.ATOM / 100) + "%";
+    $("bs-inj").textContent = "+" + (S.boost_bps.INJ / 100) + "%";
+    $("bs-src").innerHTML = bo.source === "ai" ? `<span class="pill acc">Set by AI · ${esc(bo.model)}</span>` : `<span class="pill mute" title="${esc(bo.note || "")}">Set by rules</span>`;
+    $("bs-reason").textContent = bo.reason ? `${bo.kind === "emergency" ? "Emergency cut. " : ""}${bo.reason} Set ${hhmm(bo.updated)}; next daily update ${hhmm(bo.next_update)} KST.` : "Waiting for the first update.";
     $("op-rev").textContent = "$" + fmtU(st.operator_fees_micro);
 
     const stores = [...S.merchants].sort((a, b) => b.sales_micro - a.sales_micro);
@@ -967,11 +942,6 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
   $("rp-apply").onclick = async () => { await api("POST", "/api/pool/cap", { cap_usdc: Number($("rp-cap").value) }).catch(() => {}); await refresh(); };
   $("rp-fund").onclick = async () => { await api("POST", "/api/pool/fund", {}); await refresh(); };
   $("rp-pause").onclick = async () => { await api("POST", "/api/pool/pause", {}); await refresh(); };
-  $("bs-save").onclick = async () => {
-    try { await api("POST", "/api/boost", { ATOM: Number($("bs-atom").value), USDC_INJ: Number($("bs-usdc").value), INJ: Number($("bs-inj").value) }); showErr("bs-err", null); }
-    catch (e) { showErr("bs-err", e); }
-    await refresh();
-  };
 
   refresh().then(() => go("home")).catch(e => { document.querySelector(".sub").textContent = "Cannot reach the server: " + friendly(e); });
 })();

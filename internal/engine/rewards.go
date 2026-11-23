@@ -4,11 +4,11 @@ import "fmt"
 
 func (e *Engine) quote(points int64, a Asset) RedeemQuote {
 	value := points * PointValue
-	boost := value * e.boostBps[a] / 10_000
+	boost := value * e.effectiveBoostLocked(a) / 10_000
 	gross := value + boost
 	net := gross - gross*routeFeeBps[a]/10_000
 	return RedeemQuote{
-		Asset: a, Label: assetLabel[a], Points: points, BoostBps: e.boostBps[a],
+		Asset: a, Label: assetLabel[a], Points: points, BoostBps: e.effectiveBoostLocked(a),
 		Value: value, Boost: boost, Gross: gross, Net: net,
 		Amount: float64(net) / float64(Micro) / e.priceUSD(a),
 	}

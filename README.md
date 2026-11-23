@@ -6,7 +6,7 @@
 
 - **Top up:** USDC.inj on Injective goes straight in. USDC on Base, Ethereum or Solana is routed through [Skip:Go](https://go.skip.build/) into your own vault. The platform never holds your funds.
 - **Pay:** The app checks the store's signature on the QR before paying. A payment-only key you register once (with limits) signs for you, and the platform pays the gas, so there is no popup and no fee. Each payment uses your points as a discount and earns new points.
-- **Rewards:** You redeem points for ATOM, USDC.inj or INJ; ATOM is the best value with a +7% bonus. Rewards are paid from a pool funded by merchant fees, never from user balances. The AI agent suggests how many points to keep and redeem, how much to top up and from which chain, and which store nearby gives extra points during a quiet hour.
+- **Rewards:** You redeem points for ATOM, USDC.inj or INJ; ATOM is the best value; the AI agent sets the bonus once a day (+7% at start). Rewards are paid from a pool funded by merchant fees, never from user balances. The AI agent suggests how many points to keep and redeem, how much to top up and from which chain, and which store nearby gives extra points during a quiet hour.
 
 This repository is a working demo. A Go server simulates the contracts in memory and serves the web UI. Skip:Go routes and transaction hashes are simulated; ATOM and INJ prices are live from CoinGecko; nothing is sent on-chain.
 
@@ -144,8 +144,8 @@ Only `ACTIVE` merchants can be paid. `pubkey` verifies the merchant's QR signatu
 
 - Inflows: merchant fees, sponsor and marketing budget.
 - Outflows: POINT discounts paid to merchants, redemptions including boost.
-- Controls: per-user daily redeem cap, boost per asset, pause. A pause stops POINT discounts and redemptions only; user Vaults keep working.
-- Boost rule: a boost setting is rejected unless 1,000 POINT redeemed to ATOM is worth more than 1,000 POINT redeemed to USDC.inj after route cost.
+- Controls: per-user daily redeem cap and pause (operator); the bonus per asset is set by the AI agent (see [Redeem bonus agent](#redeem-bonus-agent)). A pause stops POINT discounts and redemptions only; user Vaults keep working.
+- Bonus rule: every update must keep net value ATOM > INJ > USDC.inj after route cost and keep the pool covering all outstanding POINT.
 
 ## Flows
 
@@ -248,7 +248,7 @@ The owner signs `Vault.Withdraw` to send USDC back to their own address. No limi
 | --- | --- |
 | POINT value | 1 POINT = 0.01 USDC |
 | Earn rate | `point_earn_bps` of the USDC-paid amount, equal to the pool share: 0.20% (small stores), 0.40% and 0.45% (restaurants); happy hour adds 2-3% of the order |
-| Redeem boost | ATOM +7%, INJ +3%, USDC.inj 0% (+1% earn on next payment) |
+| Redeem boost | Set by the AI agent daily at 00:00 KST, starting at ATOM +7%, INJ +3%; USDC.inj 0% (+1% earn on next payment) |
 | Route cost (sample) | ATOM 0.6%, INJ 0.3%, USDC.inj 0% |
 | Daily redeem cap | $50 per user |
 
@@ -296,8 +296,8 @@ Other items:
 
 | Item | Rate | Payer | Destination |
 | --- | --- | --- | --- |
-| ATOM bonus | +7% of redeemed value | Ecosystem sponsor budget | User |
-| INJ bonus | +3% of redeemed value | Ecosystem sponsor budget | User |
+| ATOM bonus | Set by the AI agent (0-15%, start +7%) | Ecosystem sponsor budget | User |
+| INJ bonus | Set by the AI agent, always below ATOM (start +3%) | Ecosystem sponsor budget | User |
 | Happy hour | Extra POINT the merchant chooses (`extra_bps`) | Merchant | User, through the Reward Pool |
 | Skip:Go route fee | 0.2-0.3% on top-up and redemption routes | User (top-up), Reward Pool (redemption) | Skip:Go |
 | POINT expiry | Unused for 12 months | - | Returned to the Reward Pool |
@@ -362,6 +362,26 @@ How it decides:
 
 Rule-based baseline: keep POINT worth two average orders; top up to one week of spending, rounded up to $10, from the cheapest chain that holds enough; pick the happy hour scored by open now (+2) and same area (+1).
 
+### Redeem bonus agent
+
+The bonus works like a daily rate, as exchanges and staking programs publish rewards: it is fixed for the day and users see when it changes next.
+
+- **Daily update:** at 00:00 KST (and at server start) the agent sets the ATOM and INJ bonus for the next 24 hours. Operators cannot edit it; the operator column shows the bonus, who set it (AI or rules), why, and the next update time. The Redeem screen shows "bonus fixed until 00:00 KST".
+- **Emergency cut:** every 5 minutes the server checks coverage only. If the pool no longer covers outstanding POINT plus the ATOM bonus, the agent lowers the bonus at once. Raises happen only at the daily update.
+- **Grace for users:** for 2 minutes after any change, a redemption gets the better of the old and new bonus, so a user never gets less than the value they just reviewed.
+- To stop rewards entirely, the operator uses **Pause rewards**.
+
+Inputs: Reward Pool balance, outstanding POINT value, coverage, redeemed value per asset, route cost per asset, current bonus. Claude decides when `ANTHROPIC_API_KEY` is set; otherwise, or when the answer breaks a guardrail, the rule-based value is used.
+
+Guardrails enforced in code (`internal/engine/boost.go`):
+
+- 0% <= INJ < ATOM <= 15%
+- Each update moves a bonus by at most 2 percentage points
+- Net value after route cost: ATOM > INJ > USDC.inj
+- Pool balance >= outstanding POINT value x (1 + ATOM bonus)
+
+Rule-based fallback: ATOM about 6 points above its route cost (one more if ATOM is under half of redeemed value), capped by what the pool covers with a 20% buffer; INJ 4 points below ATOM. Each change is logged as `RewardPool.SetBoost` with signer `bonus agent` and the kind (`daily` or `emergency`).
+
 ### Happy hour
 
 A merchant-approved daily window that adds extra POINT (`extra_bps`). The merchant pays it as an extra fee into the Reward Pool, so the pool stays funded:
@@ -424,15 +444,15 @@ Wallet connect reads addresses only. Balances stay simulated and no signature is
 | Payment | Merchant QR (MPM v2.0) with ed25519 signature, 120 s expiry and one-time `order_id`; preview before paying; POINT-first discount; fee to the Reward Pool; POINT minted in the same transaction |
 | QR authentication | Four checks shown in the app; a forged QR (amount changed) fails the signature check and is rejected |
 | Rejections | Forged QR, suspended merchant, expired QR, reused order, session per-payment and daily limits, insufficient Vault balance, insufficient Reward Pool |
-| Screens | One page: demo controls bar on top, then customer app, merchant (POS and today's sales with refund) and operator (totals, rewards pool, stores, activity) |
+| Screens | One page: customer app (switch demo users from the name at the top), merchant (POS and today's sales with refund) and operator (totals, rewards pool, stores, activity) |
 | Refund | Merchant-signed cancel within 10 minutes; POINT used is returned, POINT earned is removed, already-redeemed POINT is deducted from the refund |
 | Withdraw | Owner-signed, not affected by session limits or a pool pause |
 | Session key | Grant, revoke, per-payment and daily limits; daily counters reset when the date changes |
 | Redeem | ATOM, INJ or USDC.inj with boost, daily cap and pool checks; ATOM marked as best value |
-| ATOM preference | ATOM +7%, INJ +3%, USDC.inj 0% with +1% earn on the next payment; boost changes rejected unless ATOM beats USDC.inj after route cost; the Redeem screen shows each bonus and the net gain over USDC.inj (for example ATOM +7% bonus, +6.4% vs USDC.inj) |
+| ATOM preference | Bonus set daily by the AI agent within guardrails (start ATOM +7%, INJ +3%); USDC.inj 0% with +1% earn on the next payment; the Redeem screen shows each bonus and the net gain over USDC.inj (for example ATOM +7% bonus, +6.4% vs USDC.inj) |
 | Agent | Advice on points to keep or redeem, top-up amount and cheapest chain, and a nearby happy hour; Claude when a key is set, rules otherwise; each suggestion opens a pre-filled screen and the user confirms |
 | Happy hour | Merchant-paid extra POINT during a daily window, shown on the POS, receipt and operator store table |
-| Operator | Reward Pool balance, coverage, inflow and outflow totals, daily redeem cap, budget top-up, pause, boost settings, merchant approve/suspend |
+| Operator | Reward Pool balance, coverage, inflow and outflow totals, daily redeem cap, budget top-up, pause, read-only view of the AI-set bonus with its reason, merchant approve/suspend |
 | Wallets | Keplr (`inj1` and `cosmos1`) and MetaMask (`0x` converted to `inj1`), address only |
 | Links | Skip:Go attribution on routed screens; Mintscan link for every simulated contract transaction |
 
@@ -458,7 +478,7 @@ Wallet connect reads addresses only. Balances stay simulated and no signature is
 | Item | v2 spec | Demo |
 | --- | --- | --- |
 | Redeem boost | ATOM +5%, INJ +5% | ATOM +7%, INJ +3%, so ATOM stays the best value after route cost |
-| Boost rule | Not defined | Boost changes rejected unless ATOM's net value per POINT exceeds USDC.inj |
+| Boost rule | Not defined | Set only by the AI agent, daily at 00:00 KST with emergency cuts, within code-enforced guardrails; no manual override |
 | Session limits | `x/authz` delegation | Limits enforced in the Vault contract; `x/feegrant` pays gas |
 | Pause | Not defined | Pauses the Reward Pool only; Vault payments without POINT and withdrawals keep working |
 | Refund | Not defined | Merchant-signed, 10-minute window |
@@ -484,11 +504,10 @@ Demo path:
 
 1. On the merchant POS, choose a store and press **Show payment QR**.
 2. In the app, press **Pay**, check the QR verification and preview, and confirm.
-3. Show a new QR, press **Forge current QR** in the demo controls bar, and try to pay it to see the signature rejection.
-4. Choose **Mangwon Bistro** (suspended) and pay to see the rejection.
-5. Open **Redeem** and convert POINT to ATOM.
-6. Pay again with **Use points first** on.
-7. Check the merchant and operator columns; refund a payment from the merchant column.
+3. Choose **Mangwon Bistro** (suspended) and pay to see the rejection.
+4. Open **Redeem** and convert POINT to ATOM.
+5. Pay again with **Use points first** on.
+6. Check the merchant and operator columns; refund a payment from the merchant column.
 
 ## Layout
 
@@ -518,7 +537,7 @@ web/               Static UI (embedded into the binary)
 | POST | `/api/refund` | Merchant-signed refund of a payment |
 | POST | `/api/redeem` | Burn POINT and receive ATOM, USDC.inj or INJ |
 | POST | `/api/merchants/status` | Toggle merchant ACTIVE/SUSPENDED |
-| POST | `/api/boost`, `/api/pool/cap`, `/api/pool/fund`, `/api/pool/pause` | Reward Pool settings |
+| POST | `/api/pool/cap`, `/api/pool/fund`, `/api/pool/pause` | Reward Pool settings |
 
 Errors return `{"error":{"code":"ERR_...","message":"..."}}`. History entries and contract events include `tx_hash`. `/api/state` also returns `stats` (platform totals) and per-merchant `orders`, `sales_micro`, `fees_micro`, `point_comp_micro` and `refunds`. Amounts ending in `_micro` are in units of 0.000001 USDC.
 
@@ -535,7 +554,7 @@ Sample data is defined in `internal/engine`:
 | `newUser(...)` calls (`engine.go`) | Demo users, starting Vault balance and POINT |
 | `pool` (`engine.go`) | Starting Reward Pool balance, daily redeem cap and feegrant gas pool |
 | `seedSample` (`advisor.go`) | Sample user areas, spending profiles, USDC per chain, and merchant areas and happy hours |
-| `boostBps` (`engine.go`) | Redemption boost per asset in bps (ATOM must stay above USDC.inj) |
+| `boostBps` (`engine.go`) | Starting bonus per asset in bps; the agent updates it (`boost.go`) |
 | `QRTTL`, `RefundWindow` (`types.go`) | QR expiry (120 s) and refund window (10 min) |
 
 ## Editing
@@ -543,4 +562,4 @@ Sample data is defined in `internal/engine`:
 1. Change the values above in `internal/engine`.
 2. Restart the server with `go run ./cmd/server`.
 
-Boost values can also be changed at runtime in the operator column (Rewards pool > Redeem bonus). A change is rejected if ATOM's net value per point would not exceed USDC.inj.
+The redeem bonus is not edited by hand; the agent sets it daily at 00:00 KST (see [Redeem bonus agent](#redeem-bonus-agent)).

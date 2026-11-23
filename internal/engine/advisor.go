@@ -350,9 +350,14 @@ var adviceSchema = map[string]any{
 // askClaude sends only the computed facts (no addresses or keys) and parses the structured reply.
 func askClaude(model string, f adviceFacts) (adviceDecision, error) {
 	var d adviceDecision
-	factsJSON, err := json.Marshal(f)
+	return d, claudeJSON(model, advisorSystem, f, adviceSchema, &d)
+}
+
+// claudeJSON sends facts as JSON and decodes a structured (schema-constrained) reply into out.
+func claudeJSON(model, system string, facts any, schema map[string]any, out any) error {
+	factsJSON, err := json.Marshal(facts)
 	if err != nil {
-		return d, err
+		return err
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -360,30 +365,40 @@ func askClaude(model string, f adviceFacts) (adviceDecision, error) {
 	resp, err := client.Beta.Messages.New(ctx, anthropic.BetaMessageNewParams{
 		Model:     model,
 		MaxTokens: 4000,
-		System:    []anthropic.BetaTextBlockParam{{Text: advisorSystem}},
+		System:    []anthropic.BetaTextBlockParam{{Text: system}},
 		Messages: []anthropic.BetaMessageParam{
 			anthropic.NewBetaUserMessage(anthropic.NewBetaTextBlock("Facts:\n" + string(factsJSON))),
 		},
 		OutputConfig: anthropic.BetaOutputConfigParam{
 			Effort: anthropic.BetaOutputConfigEffortLow,
-			Format: anthropic.BetaJSONOutputFormatParam{Schema: adviceSchema},
+			Format: anthropic.BetaJSONOutputFormatParam{Schema: schema},
 		},
 		Fallbacks: anthropic.BetaFallbacksParamOfDefault(),
 		Betas:     []anthropic.AnthropicBeta{anthropic.AnthropicBetaServerSideFallback2026_07_01},
 	})
 	if err != nil {
-		return d, fmt.Errorf("request failed")
+		return fmt.Errorf("request failed")
 	}
 	if resp.StopReason == anthropic.BetaStopReasonRefusal {
-		return d, fmt.Errorf("model declined")
+		return fmt.Errorf("model declined")
 	}
 	for _, b := range resp.Content {
 		if t, ok := b.AsAny().(anthropic.BetaTextBlock); ok {
-			if err := json.Unmarshal([]byte(t.Text), &d); err != nil {
-				return d, fmt.Errorf("unreadable reply")
+			if err := json.Unmarshal([]byte(t.Text), out); err != nil {
+				return fmt.Errorf("unreadable reply")
 			}
-			return d, nil
+			return nil
 		}
 	}
-	return d, fmt.Errorf("empty reply")
+	return fmt.Errorf("empty reply")
+}
+
+func agentModel() (string, bool) {
+	if os.Getenv("ANTHROPIC_API_KEY") == "" {
+		return "", false
+	}
+	if m := os.Getenv("AGENT_MODEL"); m != "" {
+		return m, true
+	}
+	return "claude-opus-5-5", true
 }
