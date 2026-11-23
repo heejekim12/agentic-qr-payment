@@ -31,6 +31,7 @@ type Engine struct {
 	txSeq        int
 	curTx        string
 	stats        Stats
+	prices       map[Asset]PriceInfo
 }
 
 func New() *Engine {
@@ -64,6 +65,10 @@ func New() *Engine {
 		e.stats.Redeemed[a] = &AssetStat{}
 	}
 	e.seedSample()
+	e.prices = map[Asset]PriceInfo{}
+	for a, p := range price {
+		e.prices[a] = PriceInfo{USD: p, Source: "sample", Updated: e.now()}
+	}
 	for _, m := range e.merchants {
 		pub, priv, err := ed25519.GenerateKey(rand.Reader)
 		if err != nil {
@@ -162,12 +167,13 @@ type poolView struct {
 }
 
 type state struct {
-	Users     []*User         `json:"users"`
-	Merchants []*Merchant     `json:"merchants"`
-	Pool      poolView        `json:"pool"`
-	BoostBps  map[Asset]int64 `json:"boost_bps"`
-	Events    []Event         `json:"events"`
-	Stats     Stats           `json:"stats"`
+	Users     []*User             `json:"users"`
+	Merchants []*Merchant         `json:"merchants"`
+	Pool      poolView            `json:"pool"`
+	BoostBps  map[Asset]int64     `json:"boost_bps"`
+	Events    []Event             `json:"events"`
+	Stats     Stats               `json:"stats"`
+	Prices    map[Asset]PriceInfo `json:"prices"`
 }
 
 // StateJSON returns the full simulated chain state.
@@ -184,5 +190,5 @@ func (e *Engine) StateJSON() ([]byte, error) {
 			h.Refundable = h.Type == "PAY" && h.Status == "PAID" && now.Sub(h.Time) < RefundWindow
 		}
 	}
-	return json.Marshal(state{Users: e.users, Merchants: e.merchants, Pool: pv, BoostBps: e.boostBps, Events: e.events, Stats: e.stats})
+	return json.Marshal(state{Users: e.users, Merchants: e.merchants, Pool: pv, BoostBps: e.boostBps, Events: e.events, Stats: e.stats, Prices: e.prices})
 }

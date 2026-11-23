@@ -340,6 +340,7 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
           <div class="opts" id="rd-opts"></div>
           <button id="rd-go" class="primary block">Redeem</button>
           <p class="note center">Paid from the rewards pool, not from your balance.</p>
+          <p class="note center" id="rd-price"></p>
         </div>
 
         <!-- WITHDRAW -->
@@ -774,6 +775,9 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
     const u = U();
     const p = Math.max(0, Math.floor(Number($("rd-pt").value) || 0));
     $("rd-avail").textContent = `${fmtP(u.points)} available`;
+    const pr = S.prices || {};
+    const src = pr.ATOM && pr.ATOM.source === "coingecko" ? `CoinGecko, updated ${hhmm(pr.ATOM.updated)}` : "sample prices (live feed unavailable)";
+    $("rd-price").textContent = pr.ATOM ? `ATOM $${pr.ATOM.usd.toFixed(3)} · INJ $${pr.INJ.usd.toFixed(2)} · ${src}` : "";
     let rows;
     try { rows = await api("GET", "/api/redeem/quote?points=" + p); }
     catch (e) { $("rd-opts").innerHTML = `<div class="alert">${esc(friendly(e))}</div>`; $("rd-go").disabled = true; return; }

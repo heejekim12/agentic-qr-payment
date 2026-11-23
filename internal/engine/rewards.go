@@ -10,7 +10,7 @@ func (e *Engine) quote(points int64, a Asset) RedeemQuote {
 	return RedeemQuote{
 		Asset: a, Label: assetLabel[a], Points: points, BoostBps: e.boostBps[a],
 		Value: value, Boost: boost, Gross: gross, Net: net,
-		Amount: float64(net) / float64(Micro) / price[a],
+		Amount: float64(net) / float64(Micro) / e.priceUSD(a),
 	}
 }
 

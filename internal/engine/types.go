@@ -30,9 +30,9 @@ var Assets = []Asset{ATOM, USDCINJ, INJ}
 
 var assetLabel = map[Asset]string{ATOM: "ATOM", USDCINJ: "USDC.inj", INJ: "INJ"}
 
-// Sample USD prices and swap/IBC route cost; replace with Skip Go quotes in production.
+// Sample USD prices (fallback until CoinGecko answers) and swap/IBC route cost.
 var (
-	price       = map[Asset]float64{ATOM: 4.80, INJ: 9.50, USDCINJ: 1}
+	price       = map[Asset]float64{ATOM: 1.18, INJ: 6.21, USDCINJ: 1}
 	routeFeeBps = map[Asset]int64{ATOM: 60, INJ: 30, USDCINJ: 0}
 )
 

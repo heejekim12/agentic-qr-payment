@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"log"
 	"net/http"
@@ -16,7 +17,9 @@ func main() {
 	flag.Parse()
 
 	mux := http.NewServeMux()
-	api.Register(mux, engine.New())
+	eng := engine.New()
+	eng.StartPriceFeed(context.Background())
+	api.Register(mux, eng)
 	mux.Handle("GET /", http.FileServerFS(web.Files))
 
 	srv := &http.Server{

@@ -8,7 +8,7 @@
 - **Pay:** The app checks the store's signature on the QR before paying. A payment-only key you register once (with limits) signs for you, and the platform pays the gas, so there is no popup and no fee. Each payment uses your points as a discount and earns new points.
 - **Rewards:** You redeem points for ATOM, USDC.inj or INJ; ATOM is the best value with a +7% bonus. Rewards are paid from a pool funded by merchant fees, never from user balances. The AI agent suggests how many points to keep and redeem, how much to top up and from which chain, and which store nearby gives extra points during a quiet hour.
 
-This repository is a working demo. A Go server simulates the contracts in memory and serves the web UI. Skip:Go routes, prices and transaction hashes are simulated; nothing is sent on-chain.
+This repository is a working demo. A Go server simulates the contracts in memory and serves the web UI. Skip:Go routes and transaction hashes are simulated; ATOM and INJ prices are live from CoinGecko; nothing is sent on-chain.
 
 ## Terms
 
@@ -36,6 +36,7 @@ This repository is a working demo. A Go server simulates the contracts in memory
 - [Fee structure](#fee-structure)
 - [Agent](#agent)
 - [Skip:Go](#skipgo)
+- [Prices](#prices)
 - [Mintscan](#mintscan)
 - [Wallets](#wallets)
 - [Status](#status)
@@ -253,10 +254,10 @@ The owner signs `Vault.Withdraw` to send USDC back to their own address. No limi
 
 Value of 1,000 POINT ($10.00) with demo settings:
 
-| Target | Boost | Route cost | Net value | Amount at sample price |
+| Target | Boost | Route cost | Net value | Amount at CoinGecko price on 2026-11-23 |
 | --- | --- | --- | --- | --- |
-| ATOM ($4.80) | +$0.70 | -$0.0642 | $10.6358 | 2.2158 ATOM |
-| INJ ($9.50) | +$0.30 | -$0.0309 | $10.2691 | 1.0810 INJ |
+| ATOM ($1.18) | +$0.70 | -$0.0642 | $10.6358 | 9.0134 ATOM |
+| INJ ($6.21) | +$0.30 | -$0.0309 | $10.2691 | 1.6536 INJ |
 | USDC.inj | $0 | $0 | $10.00 | 10.00 USDC.inj |
 
 The operator view shows pool coverage: `pool balance / (outstanding POINT * 0.01)`.
@@ -382,7 +383,16 @@ fee      = A_usdc * fee_bps / 10000 + A * extra_bps / 10000
 | Redeem POINT to INJ | USDC -> INJ swap on injective-1 | `RewardPool.RedeemPoints` |
 | Redeem POINT to USDC.inj | No route, credited to the Vault | `RewardPool.RedeemPoints` |
 
-Route fees and prices come from `routeFeeBps`, `topupChains` and `price` in `internal/engine/types.go`. They are sample values, not live Skip:Go quotes.
+Route fees come from `routeFeeBps` and `topupChains` in `internal/engine/types.go` and are sample values, not live Skip:Go quotes. ATOM and INJ prices are live (see [Prices](#prices)).
+
+## Prices
+
+ATOM and INJ USD prices come from the CoinGecko public API (`/api/v3/simple/price`, ids `cosmos` and `injective-protocol`), fetched at server start and every 5 minutes (`internal/engine/prices.go`). USDC.inj is fixed at $1.
+
+- The Redeem screen shows the prices in use, the source and the update time.
+- If CoinGecko does not answer (timeout 5 s, rate limit, no network), the last fetched prices stay in use; before the first success the sample prices in `price` (`types.go`) are used and the screen says so.
+- Prices change only how many ATOM or INJ a redemption returns. The value in USD, the bonus and the comparison with USDC.inj do not depend on them.
+- Set `COINGECKO_API_KEY` to send a CoinGecko demo API key (`x-cg-demo-api-key`) for higher rate limits.
 
 ## Mintscan
 
@@ -432,7 +442,7 @@ Wallet connect reads addresses only. Balances stay simulated and no signature is
 | --- | --- |
 | Contracts | Go in-memory simulation; no CosmWasm contracts deployed |
 | Skip:Go | Calls are simulated; no live routes, quotes or execution |
-| Prices | Fixed sample prices (ATOM $4.80, INJ $9.50) |
+| Prices | Live CoinGecko spot prices; redemptions do not use a Skip:Go quote or slippage limit yet |
 | Transaction hashes | Generated locally; Mintscan shows "not found" |
 | Wallet signing | Wallet connect reads addresses only; no transaction is signed |
 | MetaMask and ATOM | MetaMask has no `cosmos1` address; ATOM goes to the demo address |
@@ -468,6 +478,7 @@ Open http://127.0.0.1:8080. Use `-addr` to change the listen address.
 | --- | --- |
 | `ANTHROPIC_API_KEY` | Enables AI advice; without it the agent uses rules |
 | `AGENT_MODEL` | Claude model for advice (default `claude-opus-5-5`) |
+| `COINGECKO_API_KEY` | Optional CoinGecko demo API key for the price feed |
 
 Demo path:
 
@@ -517,7 +528,7 @@ Sample data is defined in `internal/engine`:
 
 | Constant | Purpose |
 | --- | --- |
-| `price` (`types.go`) | Sample USD prices for ATOM, INJ and USDC.inj |
+| `price` (`types.go`) | Fallback USD prices used until CoinGecko answers |
 | `routeFeeBps` (`types.go`) | Sample swap and IBC cost per target asset |
 | `topupChains` (`types.go`) | Top-up sources (USDC.inj on injective-1, USDC on Base, Ethereum and Solana) and route fees |
 | `merchants` (`engine.go`) | Registry entries: status, `fee_bps`, `point_earn_bps`, settlement address |
