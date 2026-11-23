@@ -54,7 +54,7 @@ func New() *Engine {
 			{ID: "MRC_REST_031", Name: "Mangwon Bistro", Category: "RESTAURANT", Status: StatusSuspended, SettlementAddr: "inj1jkl...opq", FeeBps: 70, PoolBps: 45, PointEarnBps: 45, Tier: "SME 0.5-1B"},
 		},
 		pool:         Pool{Balance: 300 * Micro, DailyCap: 50 * Micro, GasINJ: 25},
-		boostBps:     map[Asset]int64{ATOM: 700, USDCINJ: 0, INJ: 300},
+		boostBps:     map[Asset]int64{ATOM: 700, USDCINJ: 0},
 		merchantKeys: map[string]ed25519.PrivateKey{},
 		paid:         map[string]bool{},
 		seq:          42,
@@ -91,7 +91,7 @@ func New() *Engine {
 func newUser(name, addr, cosmos string, usdc, points int64) *User {
 	return &User{
 		Name: name, Addr: addr, CosmosAddr: cosmos, demoAddr: addr, demoCosmos: cosmos,
-		USDC: usdc * Micro, Points: points, INJ: 0.05,
+		USDC: usdc * Micro, Points: points,
 		Session: Session{Active: true, PerTx: 50 * Micro, Daily: 200 * Micro},
 		Policy:  Policy{Threshold: 500},
 		History: []*HistoryEntry{},

@@ -56,7 +56,7 @@ func (e *Engine) Redeem(req RedeemRequest) (RedeemQuote, error) {
 func (e *Engine) redeem(u *User, points int64, a Asset, source string) (RedeemQuote, error) {
 	signer := u.Addr + " (wallet)" // redemptions are always signed by the user
 	if !validAsset(a) {
-		return RedeemQuote{}, errf("ERR_BAD_TARGET", "target must be ATOM, USDC_INJ or INJ")
+		return RedeemQuote{}, errf("ERR_BAD_TARGET", "target must be ATOM or USDC_INJ")
 	}
 	if points <= 0 {
 		return RedeemQuote{}, errf("ERR_BAD_AMOUNT", "enter a positive number of POINT")
@@ -101,9 +101,6 @@ func (e *Engine) redeem(u *User, points int64, a Asset, source string) (RedeemQu
 		u.ATOM += q.Amount
 		route = "Skip Go injective-1 USDC.inj -> cosmoshub-4 uatom, IBC to " + u.CosmosAddr
 		note = "boost +$" + FormatUSDC(q.Boost)
-	case INJ:
-		u.INJ += q.Amount
-		route = "Skip Go USDC.inj -> INJ on injective-1 to " + u.Addr
 		note = "boost +$" + FormatUSDC(q.Boost)
 	}
 	e.addHistory(u, &HistoryEntry{

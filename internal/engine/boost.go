@@ -11,9 +11,7 @@ import (
 const (
 	atomMinPct   = 3  // keeps ATOM clearly above USDC.inj after route cost
 	atomMaxPct   = 10 // caps sponsor cost
-	injMinPct    = 0
-	injMaxPct    = 5
-	boostStepPct = 2 // largest change per update, in percentage points
+	boostStepPct = 2  // largest change per update, in percentage points
 )
 
 // BoostState tells the operator how the current bonus was set.
@@ -31,7 +29,6 @@ type BoostState struct {
 
 type boostSuggestion struct {
 	ATOM   int64  `json:"atom_pct"`
-	INJ    int64  `json:"inj_pct"`
 	Reason string `json:"reason"`
 }
 
@@ -47,16 +44,16 @@ type boostFacts struct {
 	MaxStepPct   int               `json:"max_change_per_update_pct"`
 }
 
-const boostSystem = `You set redemption bonuses for a rewards program. Points redeem to ATOM, INJ or USDC.inj.
-Goals, in order: keep the reward pool solvent, keep ATOM the best value after route cost, then INJ, then USDC.inj, and give ATOM a clear edge (about 5% net over USDC.inj) when the pool can afford it.
-Constraints: integers; atom_pct within bounds_pct atom_min..atom_max and at most max_atom_pct_pool_can_cover (if that is below atom_min, go below atom_min); inj_pct within inj_min..inj_max and below atom_pct; each value may differ from current_bonus_pct by at most max_change_per_update_pct.
+const boostSystem = `You set redemption bonuses for a rewards program. Points redeem to ATOM (with a bonus) or USDC.inj (no bonus).
+Goals, in order: keep the reward pool solvent, keep ATOM the best value after route cost, and give ATOM a clear edge (about 5% net over USDC.inj) when the pool can afford it.
+Constraints: integers; atom_pct within bounds_pct atom_min..atom_max and at most max_atom_pct_pool_can_cover (if that is below atom_min, go below atom_min); atom_pct may differ from current_bonus_pct by at most max_change_per_update_pct.
 If ATOM's share of redeemed value is low, lean toward a larger ATOM edge. Reason: one short sentence with numbers from the facts.`
 
 var boostSchema = map[string]any{
-	"type": "object", "additionalProperties": false, "required": []string{"atom_pct", "inj_pct", "reason"},
+	"type": "object", "additionalProperties": false, "required": []string{"atom_pct", "reason"},
 	"properties": map[string]any{
-		"atom_pct": map[string]any{"type": "integer"}, "inj_pct": map[string]any{"type": "integer"},
-		"reason": map[string]any{"type": "string"},
+		"atom_pct": map[string]any{"type": "integer"},
+		"reason":   map[string]any{"type": "string"},
 	},
 }
 
@@ -65,7 +62,7 @@ func (e *Engine) boostFactsLocked() boostFacts {
 	f := boostFacts{
 		PoolUSD: float64(e.pool.Balance) / float64(Micro), RedeemedUSD: map[Asset]float64{},
 		RouteCostPct: map[Asset]float64{}, CurrentPct: map[Asset]int64{}, MaxStepPct: boostStepPct,
-		Bounds: map[string]int64{"atom_min": atomMinPct, "atom_max": atomMaxPct, "inj_min": injMinPct, "inj_max": injMaxPct},
+		Bounds: map[string]int64{"atom_min": atomMinPct, "atom_max": atomMaxPct},
 	}
 	for _, u := range e.users {
 		f.LiabilityUSD += float64(u.Points*PointValue) / float64(Micro)
@@ -87,16 +84,14 @@ func netValue(bonusPct int64, routePct float64) float64 {
 	return (1 + float64(bonusPct)/100) * (1 - routePct/100)
 }
 
-func validBoost(atom, inj int64, f boostFacts) error {
+func validBoost(atom int64, f boostFacts) error {
 	switch {
 	case atom < 0 || atom > atomMaxPct || (atom < atomMinPct && f.AffordPct >= atomMinPct):
 		return fmt.Errorf("ATOM bonus outside %d-%d%%", atomMinPct, atomMaxPct)
-	case inj < injMinPct || inj > injMaxPct || (inj >= atom && atom > 0):
-		return fmt.Errorf("INJ bonus outside %d-%d%% or not below ATOM", injMinPct, injMaxPct)
-	case abs64(atom-f.CurrentPct[ATOM]) > boostStepPct || abs64(inj-f.CurrentPct[INJ]) > boostStepPct:
+	case abs64(atom-f.CurrentPct[ATOM]) > boostStepPct:
 		return fmt.Errorf("change larger than %d points", boostStepPct)
-	case !(netValue(atom, f.RouteCostPct[ATOM]) > netValue(inj, f.RouteCostPct[INJ]) && netValue(inj, f.RouteCostPct[INJ]) > 1):
-		return fmt.Errorf("ATOM > INJ > USDC.inj order broken")
+	case netValue(atom, f.RouteCostPct[ATOM]) <= 1:
+		return fmt.Errorf("ATOM would not beat USDC.inj after route cost")
 	case f.LiabilityUSD > 0 && f.PoolUSD < f.LiabilityUSD*(1+float64(atom)/100):
 		return fmt.Errorf("pool would not cover outstanding points")
 	}
@@ -115,7 +110,7 @@ func clampStep(target, cur int64) int64 {
 }
 
 // ruleBoost is the fallback: ATOM about 6 points over its route cost, capped by what the
-// pool covers with a 20% buffer; INJ 4 points below ATOM; each moves at most boostStepPct.
+// pool covers with a 20% buffer; each moves at most boostStepPct.
 func ruleBoost(f boostFacts) boostSuggestion {
 	afford := int64(atomMaxPct)
 	if f.LiabilityUSD > 0 {
@@ -134,11 +129,7 @@ func ruleBoost(f boostFacts) boostSuggestion {
 		target = max(target, atomMinPct)
 	}
 	atom := clampStep(target, f.CurrentPct[ATOM])
-	inj := min(injMaxPct, clampStep(max(injMinPct, atom-4), f.CurrentPct[INJ]))
-	for inj > 0 && validBoost(atom, inj, f) != nil {
-		inj--
-	}
-	return boostSuggestion{ATOM: atom, INJ: inj, Reason: fmt.Sprintf(
+	return boostSuggestion{ATOM: atom, Reason: fmt.Sprintf(
 		"Coverage %.0f%% allows up to %d%%; ATOM kept clear of its %.1f%% route cost.", f.CoveragePct, max(afford, 0), f.RouteCostPct[ATOM])}
 }
 
@@ -190,7 +181,7 @@ func (e *Engine) autoBoost(kind string, lowerOnly bool) {
 		var ai boostSuggestion
 		err := claudeJSON(model, boostSystem, f, boostSchema, &ai)
 		if err == nil {
-			err = validBoost(ai.ATOM, ai.INJ, f)
+			err = validBoost(ai.ATOM, f)
 		}
 		if err != nil {
 			st.Note = "AI unavailable (" + err.Error() + "); rule-based."
@@ -199,7 +190,7 @@ func (e *Engine) autoBoost(kind string, lowerOnly bool) {
 		}
 	}
 	if lowerOnly {
-		s.ATOM, s.INJ = min(s.ATOM, f.CurrentPct[ATOM]), min(s.INJ, f.CurrentPct[INJ])
+		s.ATOM = min(s.ATOM, f.CurrentPct[ATOM])
 	}
 
 	e.mu.Lock()
@@ -211,10 +202,10 @@ func (e *Engine) autoBoost(kind string, lowerOnly bool) {
 	}
 	e.prevBoost = e.boostBps
 	e.boostState = st
-	if e.boostBps[ATOM] == s.ATOM*100 && e.boostBps[INJ] == s.INJ*100 {
+	if e.boostBps[ATOM] == s.ATOM*100 {
 		return
 	}
-	e.boostBps = map[Asset]int64{ATOM: s.ATOM * 100, USDCINJ: 0, INJ: s.INJ * 100}
+	e.boostBps = map[Asset]int64{ATOM: s.ATOM * 100, USDCINJ: 0}
 	e.newTx()
-	e.log("sec", "bonus agent ("+st.Source+")", "RewardPool.SetBoost", fmt.Sprintf("%s: ATOM +%d%% · INJ +%d%% · %s", kind, s.ATOM, s.INJ, s.Reason))
+	e.log("sec", "bonus agent ("+st.Source+")", "RewardPool.SetBoost", fmt.Sprintf("%s: ATOM +%d%% · %s", kind, s.ATOM, s.Reason))
 }

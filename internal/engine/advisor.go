@@ -197,7 +197,7 @@ func ruleDecision(f adviceFacts) adviceDecision {
 		keep = f.Points
 	}
 	d.Points.Keep, d.Points.Redeem, d.Points.Target = keep, f.Points-keep, "ATOM"
-	d.Points.Reason = fmt.Sprintf("Keeps a discount for your next 2 orders (avg $%.2f); ATOM gives the most per point.", f.AvgOrderUSD)
+	d.Points.Reason = fmt.Sprintf("Keeps a discount for your next 2 orders (avg $%.2f); ATOM gives the most reward per point today.", f.AvgOrderUSD)
 
 	weekly := f.AvgOrderUSD * float64(f.OrdersPerWeek)
 	if f.BalanceUSD < weekly {
@@ -319,7 +319,7 @@ Given facts about one user, decide:
 1. points: how many points to keep for discounts on upcoming orders and how many to suggest redeeming, and to which asset. keep + redeem must equal the user's points. Suggest redeeming only if points >= suggest_redeem_at_points; otherwise redeem 0. Prefer the asset with the highest net value.
 2. topup: whether the balance is likely to run short within a week of usual orders, and if so how much (whole dollars, at most 500) and from which chain id. Pick a chain where the wallet holds at least the amount, preferring the lowest fee.
 3. promo: one merchant_id from promos_today worth visiting (prefer active now and the same area), or "" if none.
-Do not predict prices. Each reason is one short sentence a customer understands, using numbers from the facts.`
+Do not predict prices. Never suggest buying or holding an asset for gains, and never mention returns or price movements; describe only payment discounts and the reward value at the time of redemption. Each reason is one short sentence a customer understands, using numbers from the facts.`
 
 var adviceSchema = map[string]any{
 	"type": "object", "additionalProperties": false,
@@ -329,7 +329,7 @@ var adviceSchema = map[string]any{
 			"type": "object", "additionalProperties": false, "required": []string{"keep", "redeem", "target", "reason"},
 			"properties": map[string]any{
 				"keep": map[string]any{"type": "integer"}, "redeem": map[string]any{"type": "integer"},
-				"target": map[string]any{"type": "string", "enum": []string{"ATOM", "INJ", "USDC_INJ"}},
+				"target": map[string]any{"type": "string", "enum": []string{"ATOM", "USDC_INJ"}},
 				"reason": map[string]any{"type": "string"},
 			},
 		},

@@ -23,17 +23,16 @@ type Asset string
 const (
 	ATOM    Asset = "ATOM"
 	USDCINJ Asset = "USDC_INJ"
-	INJ     Asset = "INJ"
 )
 
-var Assets = []Asset{ATOM, USDCINJ, INJ}
+var Assets = []Asset{ATOM, USDCINJ}
 
-var assetLabel = map[Asset]string{ATOM: "ATOM", USDCINJ: "USDC.inj", INJ: "INJ"}
+var assetLabel = map[Asset]string{ATOM: "ATOM", USDCINJ: "USDC.inj"}
 
 // Sample USD prices (fallback until CoinGecko answers) and swap/IBC route cost.
 var (
-	price       = map[Asset]float64{ATOM: 1.18, INJ: 6.21, USDCINJ: 1}
-	routeFeeBps = map[Asset]int64{ATOM: 60, INJ: 30, USDCINJ: 0}
+	price       = map[Asset]float64{ATOM: 1.18, USDCINJ: 1}
+	routeFeeBps = map[Asset]int64{ATOM: 60, USDCINJ: 0}
 )
 
 type chainRoute struct {
@@ -154,7 +153,6 @@ type User struct {
 	USDC             int64            `json:"usdc_micro"`
 	Points           int64            `json:"points"`
 	ATOM             float64          `json:"atom"`
-	INJ              float64          `json:"inj"`
 	Session          Session          `json:"session"`
 	Policy           Policy           `json:"policy"`
 	RedeemedToday    int64            `json:"redeemed_today_micro"`

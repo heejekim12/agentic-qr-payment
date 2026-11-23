@@ -324,7 +324,7 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
           </label>
           <div class="opts" id="rd-opts"></div>
           <button id="rd-go" class="primary block">Redeem</button>
-          <p class="note center">Paid from the rewards pool, not from your balance.</p>
+          <p class="note center">Paid from the rewards pool, not from your balance. Values show the reward at redemption, not investment advice; the ATOM price can change after you receive it.</p>
           <p class="note center" id="rd-price"></p>
         </div>
 
@@ -420,8 +420,8 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
         <div class="row"><button id="rp-fund" class="sm">Add $200 budget</button><button id="rp-pause" class="sm danger">Pause rewards</button></div>
         <div class="bonus-ai">
           <div class="adv-h"><span class="t">Redeem bonus</span><span id="bs-src"></span></div>
-          <div class="kv"><span>ATOM</span><span class="n" id="bs-atom"></span><span>INJ</span><span class="n" id="bs-inj"></span><span>USDC.inj</span><span class="n">0%</span></div>
-          <p class="note">Allowed range: ATOM 3–10%, INJ 0–5% (always below ATOM). Set by the agent daily.</p>
+          <div class="kv"><span>ATOM</span><span class="n" id="bs-atom"></span><span>USDC.inj</span><span class="n">0%</span></div>
+          <p class="note">Allowed range: ATOM 3–10%. Set by the agent daily.</p>
           <p class="note" id="bs-reason"></p>
         </div>
       </div>
@@ -542,7 +542,7 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
     $("user-sel").innerHTML = S.users.map((x, i) => `<option value="${i}" ${i === cur ? "selected" : ""}>${esc(x.name)}</option>`).join("");
     renderWallet();
     $("bal-usdc").textContent = "$" + fmtU(u.usdc_micro);
-    $("bal-assets").textContent = `${u.atom.toFixed(4)} ATOM · ${u.inj.toFixed(4)} INJ`;
+    $("bal-assets").textContent = `${u.atom.toFixed(4)} ATOM`;
     $("bal-wallet").innerHTML = SOURCES.map(x => { const v = (u.holdings_micro || {})[x.id] || 0; return `<div class="wcell ${v ? "" : "zero"}"><span class="note">${esc(x.on.split(" ")[0])}</span><b>$${fmtU(v)}</b></div>`; }).join("");
     $("bal-pt").textContent = fmtP(u.points) + " points";
     $("bal-pt-usd").textContent = "≈ $" + (u.points / 100).toFixed(2);
@@ -756,18 +756,18 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
     const pr = S.prices || {};
     const src = pr.ATOM && pr.ATOM.source === "coingecko" ? `CoinGecko, updated ${hhmm(pr.ATOM.updated)}` : "sample prices (live feed unavailable)";
     const nx = S.boost && S.boost.next_update ? ` · bonus fixed until ${hhmm(S.boost.next_update)} KST` : "";
-    $("rd-price").textContent = pr.ATOM ? `ATOM $${pr.ATOM.usd.toFixed(3)} · INJ $${pr.INJ.usd.toFixed(2)} · ${src}${nx}` : "";
+    $("rd-price").textContent = pr.ATOM ? `ATOM $${pr.ATOM.usd.toFixed(3)} · ${src}${nx}` : "";
     let rows;
     try { rows = await api("GET", "/api/redeem/quote?points=" + p); }
     catch (e) { $("rd-opts").innerHTML = `<div class="alert">${esc(friendly(e))}</div>`; $("rd-go").disabled = true; return; }
-    const dest = { ATOM: "to your Cosmos Hub wallet", INJ: "to your Injective wallet", USDC_INJ: "to your balance, +1% points next payment" };
+    const dest = { ATOM: "to your Cosmos Hub wallet", USDC_INJ: "to your balance, +1% points next payment" };
     const base = (rows.find(q => q.asset === "USDC_INJ") || {}).net_micro || 0;
     $("rd-opts").innerHTML = rows.map(q => {
       const bonus = q.boost_bps ? `<span class="pill acc">+${q.boost_bps / 100}% bonus</span>` : "";
       const more = base && q.net_micro > base ? `<span class="more">+${((q.net_micro / base - 1) * 100).toFixed(1)}% vs USDC.inj</span>` : "";
       return `<label class="opt ${q.asset === redeemTarget ? "sel" : ""}">
       <input type="radio" name="rd" value="${q.asset}" ${q.asset === redeemTarget ? "checked" : ""}>
-      <div><div class="t">${esc(q.label)} ${bonus} ${q.best ? '<span class="pill ok">Best value</span>' : ""}</div><p class="note">${dest[q.asset]}</p></div>
+      <div><div class="t">${esc(q.label)} ${bonus} ${q.best ? '<span class="pill ok">Most reward per point</span>' : ""}</div><p class="note">${dest[q.asset]}</p></div>
       <div class="v"><b>${amt(q.asset, q.amount)}</b><span class="note">$${(q.net_micro / MICRO).toFixed(2)}</span>${more}</div></label>`;
     }).join("");
     $("rd-opts").querySelectorAll("input").forEach(r => r.onchange = () => { redeemTarget = r.value; renderRedeem(); });
@@ -894,7 +894,7 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
   // ---------- operator ----------
   function renderOperator() {
     const st = S.stats, p = S.pool;
-    const assets = [["ATOM", "ATOM", "var(--accent)"], ["INJ", "INJ", "var(--pt)"], ["USDC_INJ", "USDC.inj", "var(--muted)"]];
+    const assets = [["ATOM", "ATOM", "var(--accent)"], ["USDC_INJ", "USDC.inj", "var(--muted)"]];
     const total = assets.reduce((s, [a]) => s + st.redeemed[a].value_micro, 0);
     const atomShare = total ? (st.redeemed.ATOM.value_micro / total * 100).toFixed(0) + "%" : "–";
     const blocked = Object.values(st.rejected).reduce((s, n) => s + n, 0);
@@ -923,7 +923,6 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
     $("rp-pause").textContent = p.paused ? "Resume rewards" : "Pause rewards";
     const bo = S.boost || {};
     $("bs-atom").textContent = "+" + (S.boost_bps.ATOM / 100) + "%";
-    $("bs-inj").textContent = "+" + (S.boost_bps.INJ / 100) + "%";
     $("bs-src").innerHTML = bo.source === "ai" ? `<span class="pill acc">Set by AI · ${esc(bo.model)}</span>` : `<span class="pill mute" title="${esc(bo.note || "")}">Set by rules</span>`;
     $("bs-reason").textContent = bo.reason ? `${bo.kind === "emergency" ? "Emergency cut. " : ""}${bo.reason} Set ${hhmm(bo.updated)}; next daily update ${hhmm(bo.next_update)} KST.` : "Waiting for the first update.";
     $("op-rev").textContent = "$" + fmtU(st.operator_fees_micro);

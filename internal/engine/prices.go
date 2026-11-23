@@ -19,7 +19,7 @@ type PriceInfo struct {
 
 const priceRefresh = 5 * time.Minute
 
-var coingeckoIDs = map[Asset]string{ATOM: "cosmos", INJ: "injective-protocol"}
+var coingeckoIDs = map[Asset]string{ATOM: "cosmos"}
 
 // priceUSD returns the current price; caller holds e.mu.
 func (e *Engine) priceUSD(a Asset) float64 {
@@ -29,7 +29,7 @@ func (e *Engine) priceUSD(a Asset) float64 {
 	return price[a]
 }
 
-// StartPriceFeed fetches ATOM and INJ prices from CoinGecko now and every 5 minutes.
+// StartPriceFeed fetches the ATOM price from CoinGecko now and every 5 minutes.
 // On failure the last known (or sample) prices stay in use.
 func (e *Engine) StartPriceFeed(ctx context.Context) {
 	go func() {
@@ -52,7 +52,7 @@ func (e *Engine) StartPriceFeed(ctx context.Context) {
 func (e *Engine) refreshPrices(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	url := "https://api.coingecko.com/api/v3/simple/price?ids=cosmos,injective-protocol&vs_currencies=usd"
+	url := "https://api.coingecko.com/api/v3/simple/price?ids=cosmos&vs_currencies=usd"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return err
