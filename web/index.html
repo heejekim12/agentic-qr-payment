@@ -69,8 +69,8 @@ header.top .sub { color: var(--muted); margin: 2px 0 0; }
 @media (max-width: 1200px) { .stage { grid-template-columns: minmax(0, 400px) minmax(0, 1fr); } .col-op { grid-column: 1 / -1; } }
 @media (max-width: 880px) { .stage { grid-template-columns: minmax(0, 1fr); } }
 .col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-.col-h { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-family: var(--f-display); font-size: 12.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
-.col-h span:first-child { color: var(--fg); font-weight: 600; }
+.col-h { display: flex; align-items: baseline; gap: 10px; padding: 0 0 8px 12px; border-left: 4px solid var(--accent); font-family: var(--f-display); color: var(--muted); font-size: 14px; }
+.col-h span:first-child { color: var(--fg); font-size: 22px; font-weight: 700; }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 18px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .card h2 { font-size: 16px; display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
 .card h2 small { font-family: var(--f-body); font-weight: 400; font-size: 12.5px; color: var(--muted); }
@@ -200,7 +200,20 @@ header.top .sub { color: var(--muted); margin: 2px 0 0; }
 
 /* merchant */
 .pos-qr { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; background: var(--panel-2); border-radius: 14px; padding: 16px; }
-.pos-qr canvas { width: 140px; height: 140px; background: #fff; border-radius: 10px; padding: 8px; image-rendering: pixelated; flex: none; }
+.pos-qr canvas { width: 150px; height: 150px; background: #fff; border-radius: 10px; image-rendering: pixelated; flex: none; }
+/* scan */
+.scan-view { position: relative; align-self: center; width: 240px; height: 240px; margin-top: 12px; border-radius: 20px; background: #05070a; overflow: hidden; display: grid; place-items: center; }
+.scan-view canvas { width: 170px; height: 170px; border-radius: 8px; image-rendering: pixelated; opacity: .92; }
+.scan-view .corner { position: absolute; width: 34px; height: 34px; border: 3px solid var(--accent); }
+.scan-view .tl { top: 14px; left: 14px; border-right: 0; border-bottom: 0; border-radius: 10px 0 0 0; }
+.scan-view .tr { top: 14px; right: 14px; border-left: 0; border-bottom: 0; border-radius: 0 10px 0 0; }
+.scan-view .bl { bottom: 14px; left: 14px; border-right: 0; border-top: 0; border-radius: 0 0 0 10px; }
+.scan-view .br { bottom: 14px; right: 14px; border-left: 0; border-top: 0; border-radius: 0 0 10px 0; }
+.scan-view .line { position: absolute; left: 24px; right: 24px; top: 24px; height: 2px; background: var(--accent); box-shadow: 0 0 12px 2px var(--accent); animation: scan 1.1s ease-in-out infinite alternate; }
+.scan-view.done .line { display: none; }
+.scan-view.done .corner { border-color: var(--ok); }
+@keyframes scan { to { top: calc(100% - 26px); } }
+@media (prefers-reduced-motion: reduce) { .scan-view .line { animation: none; top: 50%; } }
 .pos-qr .meta { flex: 1 1 160px; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
 .pos-qr .amt { font-family: var(--f-display); font-size: 30px; font-weight: 600; }
 details.more summary { cursor: pointer; color: var(--muted); font-size: 12.5px; }
@@ -252,7 +265,7 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
   <div class="stage">
     <!-- CUSTOMER -->
     <div class="col">
-      <div class="col-h"><span>Customer</span><span>app</span></div>
+      <div class="col-h"><span>Customer</span><span>pays by QR</span></div>
       <div class="phone" aria-label="Customer app">
         <div class="phone-top">
           <label class="hello" for="user-sel">Hi, <select id="user-sel" aria-label="Demo user"></select></label>
@@ -284,7 +297,7 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
             <div class="section-t"><span>USDC in your wallets</span><span class="note">top up to use</span></div>
             <div class="wgrid" id="bal-wallet"></div>
           </div>
-          <button class="primary pay-big" data-go="pay"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4v-3"/></svg>Pay</button>
+          <button class="primary pay-big" data-go="scan"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4v-3"/></svg>Pay</button>
           <div class="actions">
             <button class="act" data-go="topup"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Top up</button>
             <button class="act" data-go="redeem"><svg viewBox="0 0 24 24"><path d="M7 7h11l-3-3M17 17H6l3 3"/></svg>Redeem</button>
@@ -293,6 +306,13 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
           <div id="home-agent"></div>
           <div class="section-t"><span>Recent</span><button class="link" data-go="settings">Settings</button></div>
           <div class="activity" id="activity"></div>
+        </div>
+
+        <!-- SCAN -->
+        <div class="screen" id="v-scan" hidden>
+          <div class="scr-head"><button class="back" data-go="home" aria-label="Back">&larr;</button><h2>Scan QR</h2></div>
+          <div class="scan-view" id="scan-view"><canvas id="scan-cam" aria-label="Camera view"></canvas><span class="corner tl"></span><span class="corner tr"></span><span class="corner bl"></span><span class="corner br"></span><span class="line"></span></div>
+          <p class="note center" id="scan-msg">Point the camera at the store's QR.</p>
         </div>
 
         <!-- PAY -->
@@ -362,7 +382,7 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
 
     <!-- MERCHANT -->
     <div class="col">
-      <div class="col-h"><span>Merchant</span><span>POS</span></div>
+      <div class="col-h"><span>Merchant</span><span>shows QR, gets paid</span></div>
       <div class="card" aria-label="Merchant POS">
         <div class="row">
           <label class="field">Store<select id="pos-merchant"></select></label>
@@ -371,12 +391,12 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
         <button id="pos-gen" class="primary block">Show payment QR</button>
         <p class="err" id="pos-err" hidden></p>
         <div id="pos-qr" class="pos-qr" hidden>
-          <canvas id="qr" width="29" height="29" aria-label="Payment QR pattern"></canvas>
+          <canvas id="qr" aria-label="Payment QR"></canvas>
           <div class="meta">
             <span class="note" id="pos-store"></span>
             <span class="amt" id="pos-amount"></span>
             <span id="pos-status"></span>
-            <span class="note">Demo pattern. Pay with the app.</span>
+            <span class="note">Scan with the app to pay.</span>
           </div>
         </div>
         <details class="more" id="pos-details" hidden><summary>Signed QR data</summary><pre class="json" id="qr-json"></pre></details>
@@ -392,7 +412,7 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
 
     <!-- OPERATOR -->
     <div class="col col-op">
-      <div class="col-h"><span>Operator</span><span>all users and stores</span></div>
+      <div class="col-h"><span>Operator</span><span>runs the rewards pool</span></div>
       <div class="card">
         <div class="kpis" id="op-kpis"></div>
       </div>
@@ -450,6 +470,8 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
   </footer>
 </div>
 
+<script src="vendor/qrcode.js"></script>
+<script src="vendor/jsQR.js"></script>
 <script>
 (() => {
   const MICRO = 1_000_000;
@@ -512,6 +534,7 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
     document.querySelectorAll(".phone .screen[id^='v-']").forEach(s => { s.hidden = s.id !== "v-" + v; });
     $("w-menu").hidden = true;
     if (v === "pay") renderPay();
+    if (v === "scan") startScan();
     if (v === "topup") {
       const h = U().holdings_micro || {};
       if (!(h[tuChain] > 0)) { const best = SOURCES.reduce((a, b) => ((h[b.id] || 0) > (h[a.id] || 0) ? b : a)); tuChain = best.id; renderAssetPick(); }
@@ -817,25 +840,47 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
   };
 
   // ---------- merchant POS ----------
+  // ---------- scan: the camera is replaced by the POS QR on screen; decoding is real ----------
+  let scanTimer = null;
+  function startScan() {
+    clearTimeout(scanTimer);
+    const view = $("scan-view"), cam = $("scan-cam"), msg = $("scan-msg");
+    view.classList.remove("done");
+    const src = $("qr");
+    if (!qr || !src.width) {
+      cam.width = cam.height = 1; msg.textContent = 'No QR in view. Press "Show payment QR" on the merchant POS.';
+      return;
+    }
+    cam.width = src.width; cam.height = src.height;
+    cam.getContext("2d").drawImage(src, 0, 0);
+    msg.textContent = "Scanning…";
+    scanTimer = setTimeout(() => {
+      const img = cam.getContext("2d").getImageData(0, 0, cam.width, cam.height);
+      const code = jsQR(img.data, img.width, img.height);
+      let p = null;
+      try { p = code && JSON.parse(code.data); } catch (e) { p = null; }
+      if (!p) { msg.textContent = "Could not read the QR. Try again."; return; }
+      view.classList.add("done");
+      msg.textContent = "QR read: " + p.merchant_id + " · $" + p.amount_usdc;
+      qr = p;
+      scanTimer = setTimeout(() => { if (!$("v-scan").hidden) go("pay"); }, 500);
+    }, 1200);
+  }
+
   function renderPos() {
     const sel = $("pos-merchant").value;
     $("pos-merchant").innerHTML = S.merchants.map(m => `<option value="${esc(m.merchant_id)}">${esc(m.name)}${m.status === "ACTIVE" ? "" : " (suspended)"}</option>`).join("");
     if (sel) $("pos-merchant").value = sel;
   }
-  function hash(str) { let h = 2166136261; for (const c of str) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; }
+  // Real QR (byte mode, level M) with a 4-module quiet zone, 4 px per module.
   function drawQr(payload) {
-    const c = $("qr"), x = c.getContext("2d"), n = 29;
-    x.fillStyle = "#fff"; x.fillRect(0, 0, n, n);
-    let s = hash(payload) || 1;
-    const rnd = () => { s ^= s << 13; s ^= s >>> 17; s ^= s << 5; return (s >>> 0) / 4294967296; };
-    x.fillStyle = "#111";
-    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) if (rnd() < 0.48) x.fillRect(i, j, 1, 1);
-    for (const [a, b] of [[0, 0], [n - 7, 0], [0, n - 7]]) {
-      x.fillStyle = "#fff"; x.fillRect(Math.max(0, a - 1), Math.max(0, b - 1), 8, 8);
-      x.fillStyle = "#111"; x.fillRect(a, b, 7, 7);
-      x.fillStyle = "#fff"; x.fillRect(a + 1, b + 1, 5, 5);
-      x.fillStyle = "#111"; x.fillRect(a + 2, b + 2, 3, 3);
-    }
+    const q = qrcode(0, "M"); q.addData(payload); q.make();
+    const n = q.getModuleCount(), px = 4, quiet = 4, size = (n + quiet * 2) * px;
+    const c = $("qr"), x = c.getContext("2d");
+    c.width = c.height = size;
+    x.fillStyle = "#fff"; x.fillRect(0, 0, size, size);
+    x.fillStyle = "#000";
+    for (let r = 0; r < n; r++) for (let k = 0; k < n; k++) if (q.isDark(r, k)) x.fillRect((k + quiet) * px, (r + quiet) * px, px, px);
   }
   function posTick() {
     if (!$("pos-qr").dataset.exp) return;
@@ -860,7 +905,7 @@ footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weig
     $("pos-qr").dataset.exp = p.expires_at;
     showQr(p);
     clearInterval(timerId); posTick(); timerId = setInterval(posTick, 1000);
-    toast("QR ready. Tap Pay in the app.");
+    toast("QR ready. Scan it with the app.");
   };
 
   // ---------- merchant: today ----------

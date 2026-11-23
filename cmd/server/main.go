@@ -5,7 +5,10 @@ import (
 	"flag"
 	"log"
 	"net/http"
+	"os"
 	"time"
+
+	"github.com/joho/godotenv"
 
 	"agentic-qr-payment/internal/api"
 	"agentic-qr-payment/internal/engine"
@@ -15,6 +18,11 @@ import (
 func main() {
 	addr := flag.String("addr", "127.0.0.1:8080", "listen address")
 	flag.Parse()
+
+	// Load .env if present; variables already set in the environment win.
+	if err := godotenv.Load(); err != nil && !os.IsNotExist(err) {
+		log.Fatalf("load .env: %v", err)
+	}
 
 	mux := http.NewServeMux()
 	eng := engine.New()
