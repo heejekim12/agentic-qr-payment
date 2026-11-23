@@ -2,7 +2,7 @@
 
 Demo of a non-custodial prepaid QR payment and point reward program on Injective.
 
-Users deposit USDC into their own Prepaid Vault, pay whitelisted cafes and restaurants by QR without a wallet popup, earn soulbound POINT, and redeem POINT for ATOM, USDC.inj or INJ. An AI agent recommends or runs the redemption, and ATOM always returns more value per point than USDC.inj.
+Users deposit USDC into their own Prepaid Vault, pay whitelisted cafes and restaurants by QR without a wallet popup, earn soulbound POINT, and redeem POINT for ATOM, USDC.inj or INJ. An agent suggests when and what to redeem, but only the user redeems, and ATOM always returns more value per point than USDC.inj.
 
 This repository is a working simulation. A Go server models the contracts in memory and serves a web UI. Skip:Go routes, prices and transaction hashes are simulated; nothing is sent on-chain.
 
@@ -64,7 +64,7 @@ flowchart TB
   VAULT -- fee in, discount out --> POOL
   APP -- RedeemPoints --> POOL
   POOL -- swap + IBC --> SKIP --> HUB
-  AGENT -- recommend / auto-redeem --> APP
+  AGENT -- suggest only --> APP
 ```
 
 | Component | Role | In this repo |
@@ -74,7 +74,7 @@ flowchart TB
 | POINT | Non-transferable reward token; only minted on payment and burned on discount or redemption | `User.Points` in `internal/engine` |
 | Reward Pool | Funds POINT discounts and redemptions; receives merchant fees and sponsor budget | `internal/engine/rewards.go`, `admin.go` |
 | Session key | Key registered on the Vault with per-payment and daily limits, used for QR payments | `Session` in `internal/engine/types.go` |
-| Agent | Reads the user's policy after each payment and suggests or runs a redemption | `runAgent` in `internal/engine/rewards.go` |
+| Agent | Suggests a redemption after each payment; never redeems on its own | `runAgent` in `internal/engine/rewards.go` |
 | Web UI | Customer app, merchant POS and operator view | `web/index.html` |
 
 ## Contracts
@@ -205,7 +205,7 @@ Reward Pool +A_point - fee + (already redeemed POINT) * 0.01
 
 ### Redeem
 
-1. The user or the agent burns POINT through `RewardPool.RedeemPoints`.
+1. The user burns POINT through `RewardPool.RedeemPoints`, signed with their own wallet. The agent can only suggest.
 2. The pool pays `value + boost`, where `value = POINT * 0.01`.
 3. The payout is routed by target:
    - ATOM: Skip:Go swaps USDC to `uatom` and sends it over IBC to the user's `cosmos1` address.
@@ -287,7 +287,9 @@ Platform break-even: `monthly fixed cost / (0.005 - gas cost per payment / avera
 
 ## Agent
 
-Policy per user (off-chain, enforced by on-chain limits):
+The agent advises; the user decides. It never redeems POINT, moves funds or changes limits. Every redemption is confirmed and signed by the user.
+
+Policy per user (off-chain):
 
 ```json
 {
@@ -295,21 +297,16 @@ Policy per user (off-chain, enforced by on-chain limits):
   "authz_max_per_tx_usdc": "50.00",
   "authz_daily_limit_usdc": "200.00",
   "use_point_first_on_qr": true,
-  "auto_redeem_policy": {
-    "enabled": true,
-    "threshold_points": 500,
-    "target_allocation": { "ATOM": 0.5, "USDC_INJ": 0.3, "INJ": 0.2 }
-  }
+  "suggest_redeem_at_points": 500
 }
 ```
 
 After each payment:
 
-| POINT balance | Auto-redeem | Agent action |
-| --- | --- | --- |
-| Below threshold | Any | Shows how many POINT remain to the threshold and the discount available on the next order |
-| At or above threshold | Off | Shows a one-click card: convert all POINT to ATOM, with the extra value over USDC.inj |
-| At or above threshold | On | Redeems by `target_allocation`; rounding remainder goes to ATOM |
+| POINT balance | Agent action |
+| --- | --- |
+| Below the suggestion point | Shows how many POINT remain and the discount available on the next order |
+| At or above the suggestion point | Shows a card comparing ATOM with USDC.inj; **Review and redeem** opens the Redeem screen with ATOM filled in, **Keep my points** dismisses it |
 
 ## Skip:Go
 
@@ -355,13 +352,13 @@ Wallet connect reads addresses only. Balances stay simulated and no signature is
 | Payment | Merchant QR (MPM v2.0) with ed25519 signature, 120 s expiry and one-time `order_id`; preview before paying; POINT-first discount; fee to the Reward Pool; POINT minted in the same transaction |
 | QR authentication | Four checks shown in the app; a forged QR (amount changed) fails the signature check and is rejected |
 | Rejections | Forged QR, suspended merchant, expired QR, reused order, session per-payment and daily limits, insufficient Vault balance, insufficient Reward Pool |
-| Screens | Customer, merchant (POS and store dashboard with refund) and overview (platform totals) on one page |
+| Screens | One page: demo controls bar on top, then customer app, merchant (POS and today's sales with refund) and operator (totals, rewards pool, stores, activity) |
 | Refund | Merchant-signed cancel within 10 minutes; POINT used is returned, POINT earned is removed, already-redeemed POINT is deducted from the refund |
 | Withdraw | Owner-signed, not affected by session limits or a pool pause |
 | Session key | Grant, revoke, per-payment and daily limits; daily counters reset when the date changes |
 | Redeem | ATOM, INJ or USDC.inj with boost, daily cap and pool checks; ATOM marked as best value |
 | ATOM preference | ATOM +10%, INJ +5%, USDC.inj 0% with +1% earn on the next payment; boost changes rejected unless ATOM beats USDC.inj after route cost |
-| Agent | After each payment: progress to threshold, one-click ATOM card, or auto-redeem by allocation |
+| Agent | After each payment: progress to the suggestion point, or a suggestion card that opens Redeem with ATOM filled in; the user confirms |
 | Operator | Reward Pool balance, coverage, inflow and outflow totals, daily redeem cap, budget top-up, pause, boost settings, merchant approve/suspend |
 | Wallets | Keplr (`inj1` and `cosmos1`) and MetaMask (`0x` converted to `inj1`), address only |
 | Links | Skip:Go attribution on routed screens; Mintscan link for every simulated contract transaction |
@@ -407,11 +404,11 @@ Demo path:
 
 1. On the merchant POS, choose a store and press **Show payment QR**.
 2. In the app, press **Pay**, check the QR verification and preview, and confirm.
-3. Show a new QR, press **Forge this QR** on the POS, and try to pay it to see the signature rejection.
+3. Show a new QR, press **Forge current QR** in the demo controls bar, and try to pay it to see the signature rejection.
 4. Choose **Mangwon Bistro** (suspended) and pay to see the rejection.
 5. Open **Redeem** and convert POINT to ATOM.
 6. Pay again with **Use points first** on.
-7. Check the store dashboard and the overview; refund a payment from the store dashboard.
+7. Check the merchant and operator columns; refund a payment from the merchant column.
 
 ## Layout
 
@@ -431,7 +428,7 @@ web/               Static UI (embedded into the binary)
 | POST | `/api/topup/quote`, `/api/topup` | Top-up quote and deposit into the Vault |
 | POST | `/api/withdraw` | Owner withdrawal from the Vault |
 | POST | `/api/session` | Grant or revoke the session key |
-| POST | `/api/policy` | Session limits and auto-redeem policy |
+| POST | `/api/policy` | Session limits and the agent's suggestion point |
 | POST | `/api/wallet/connect`, `/api/wallet/disconnect` | Use Keplr or MetaMask addresses for a user |
 | POST | `/api/qr` | Merchant-signed payment QR |
 | POST | `/api/qr/verify` | QR authentication checks for a scanned payload |
@@ -464,4 +461,4 @@ Sample data is defined in `internal/engine`:
 1. Change the values above in `internal/engine`.
 2. Restart the server with `go run ./cmd/server`.
 
-Boost values can also be changed at runtime in the Redeem bonus panel. A change is rejected if ATOM's net value per point would not exceed USDC.inj.
+Boost values can also be changed at runtime in the operator column (Rewards pool > Redeem bonus). A change is rejected if ATOM's net value per point would not exceed USDC.inj.

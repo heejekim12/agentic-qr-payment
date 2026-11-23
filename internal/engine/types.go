@@ -99,10 +99,9 @@ type Session struct {
 	SpentToday int64 `json:"spent_today_micro"`
 }
 
+// Policy only tunes the agent's advice; it never authorizes the agent to act.
 type Policy struct {
-	Auto      bool              `json:"auto"`
-	Threshold int64             `json:"threshold"`
-	Weights   map[Asset]float64 `json:"weights"`
+	Threshold int64 `json:"threshold"` // POINT balance at which the agent suggests redeeming
 }
 
 type HistoryEntry struct {
@@ -222,7 +221,7 @@ type Receipt struct {
 }
 
 type AgentCard struct {
-	Kind    string   `json:"kind"` // info, suggest, auto
+	Kind    string   `json:"kind"` // info, suggest
 	Message string   `json:"message"`
 	Lines   []string `json:"lines,omitempty"`
 	Points  int64    `json:"points,omitempty"`

@@ -1,9 +1,6 @@
 package engine
 
-import (
-	"fmt"
-	"strings"
-)
+import "fmt"
 
 func (e *Engine) quote(points int64, a Asset) RedeemQuote {
 	value := points * PointValue
@@ -57,10 +54,7 @@ func (e *Engine) Redeem(req RedeemRequest) (RedeemQuote, error) {
 
 // redeem mirrors RewardPool.RedeemPoints: burn POINT, pay from pool, route via Skip Go.
 func (e *Engine) redeem(u *User, points int64, a Asset, source string) (RedeemQuote, error) {
-	signer := u.Addr + " (wallet)"
-	if strings.HasPrefix(source, "agent") {
-		signer = "session key"
-	}
+	signer := u.Addr + " (wallet)" // redemptions are always signed by the user
 	if !validAsset(a) {
 		return RedeemQuote{}, errf("ERR_BAD_TARGET", "target must be ATOM, USDC_INJ or INJ")
 	}
@@ -128,37 +122,14 @@ func fmtAmount(a Asset, v float64) string {
 	return fmt.Sprintf("%.4f", v)
 }
 
-// runAgent decides the post-payment action from the user's policy.
+// runAgent advises after each payment. It never redeems; the user decides and signs.
 func (e *Engine) runAgent(u *User) AgentCard {
-	P, pol := u.Points, u.Policy
-	if P < pol.Threshold {
-		return AgentCard{Kind: "info", Message: fmt.Sprintf("%d P now. %d P more until the %d P threshold. Next order with POINT first saves $%s.",
-			P, pol.Threshold-P, pol.Threshold, FormatUSDC(P*PointValue))}
+	P, th := u.Points, u.Policy.Threshold
+	if P < th {
+		return AgentCard{Kind: "info", Message: fmt.Sprintf("You have %d points, worth $%s off your next order.", P, FormatUSDC(P*PointValue))}
 	}
 	qa, qu := e.quote(P, ATOM), e.quote(P, USDCINJ)
-	if !pol.Auto {
-		return AgentCard{Kind: "suggest", Points: P, Message: fmt.Sprintf("Your %d P to ATOM now: %.4f ATOM ($%s) with +%d%% boost. $%s more than USDC.inj.",
-			P, qa.Amount, FormatUSDC(qa.Net), e.boostBps[ATOM]/100, FormatUSDC(qa.Net-qu.Net))}
-	}
-	parts := map[Asset]int64{}
-	var used int64
-	for _, a := range Assets {
-		parts[a] = int64(float64(P) * pol.Weights[a])
-		used += parts[a]
-	}
-	parts[ATOM] += P - used
-	e.log("pt", "agent", "auto-redeem", fmt.Sprintf("%s · %d P >= threshold %d P", u.Name, P, pol.Threshold))
-	card := AgentCard{Kind: "auto", Message: fmt.Sprintf("Auto-redeem at %d P threshold", pol.Threshold)}
-	for _, a := range Assets {
-		if parts[a] <= 0 {
-			continue
-		}
-		q, err := e.redeem(u, parts[a], a, "agent auto-redeem")
-		if err != nil {
-			card.Lines = append(card.Lines, assetLabel[a]+": "+err.Error())
-			continue
-		}
-		card.Lines = append(card.Lines, fmt.Sprintf("%d P -> %s %s", parts[a], fmtAmount(a, q.Amount), q.Label))
-	}
-	return card
+	return AgentCard{Kind: "suggest", Points: P, Message: fmt.Sprintf(
+		"You have %d points. As ATOM they are worth %.4f ATOM ($%s, +%d%% bonus), $%s more than USDC.inj. You can also keep them for a discount.",
+		P, qa.Amount, FormatUSDC(qa.Net), e.boostBps[ATOM]/100, FormatUSDC(qa.Net-qu.Net))}
 }

@@ -4,9 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Agentic QR Payment</title>
+<link rel="icon" href="data:,">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
 <style>
-/* Layout: phone-sized customer app beside the merchant POS; operator internals below */
+/* Layout: demo bar on top; customer phone, merchant and operator columns side by side */
 :root {
   --bg: #0d1015; --panel: #151a21; --panel-2: #1c232c; --panel-3: #232b36; --line: #2a323d;
   --fg: #e6ebf1; --muted: #8d98a7;
@@ -23,7 +24,7 @@
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--f-body); font-size: 14px; line-height: 1.5; }
-.wrap { max-width: 1480px; margin: 0 auto; padding-block: 24px 40px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.wrap { max-width: 1480px; margin: 0 auto; padding-block: 20px 40px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
 h1, h2, h3 { font-family: var(--f-display); margin: 0; text-wrap: balance; }
 button { font: inherit; font-weight: 600; cursor: pointer; border-radius: 10px; border: 1px solid var(--line); background: var(--panel-2); color: var(--fg); padding: 10px 14px; }
 button:hover { filter: brightness(1.12); }
@@ -34,57 +35,59 @@ button.danger { background: transparent; border-color: var(--bad); color: var(--
 button.block { width: 100%; padding: 14px; font-size: 15px; }
 button.sm { padding: 5px 10px; font-size: 12.5px; border-radius: 8px; }
 input, select { background: var(--panel-2); color: var(--fg); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font: inherit; font-family: var(--f-mono); width: 100%; }
-input:focus-visible, select:focus-visible, button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+input:focus-visible, select:focus-visible, button:focus-visible, a:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 a { color: var(--accent); }
 .note { font-size: 12.5px; color: var(--muted); margin: 0; }
 .center { text-align: center; }
-.mono { font-family: var(--f-mono); }
 .pill { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
 .pill.ok { background: var(--ok-soft); color: var(--ok); } .pill.bad { background: var(--bad-soft); color: var(--bad); }
 .pill.mute { background: var(--panel-3); color: var(--muted); } .pill.acc { background: var(--accent-soft); color: var(--accent); }
+.err { color: var(--bad); font-size: 12.5px; margin: 0; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
+.row > * { min-width: 0; }
+.field { display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; color: var(--muted); flex: 1 1 120px; }
+.tx { font-size: 12px; text-decoration: none; white-space: nowrap; }
+.tx:hover { text-decoration: underline; }
 
-/* Skip:Go attribution mark */
+/* Skip:Go mark */
 .skip { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--muted); background: #121212; border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; text-decoration: none; white-space: nowrap; }
-.skip:hover { border-color: var(--muted); }
 .sg { font-family: var(--f-display); font-weight: 700; font-size: 14px; color: #fff; letter-spacing: -.02em; line-height: 1; }
 .sg b { color: var(--skip-dot); font-weight: 700; padding: 0 1px; }
 
-/* header */
-header.top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px; margin-bottom: 18px; }
-header.top h1 { font-size: 26px; font-weight: 600; letter-spacing: -.01em; }
-header.top .sub { color: var(--muted); margin: 4px 0 0; max-width: 64ch; }
-.hdr-r { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+/* header + demo bar */
+header.top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 24px; margin-bottom: 14px; }
+header.top h1 { font-size: 24px; font-weight: 600; letter-spacing: -.01em; }
+header.top .sub { color: var(--muted); margin: 2px 0 0; }
 .sim { font-family: var(--f-mono); font-size: 11px; color: var(--warn); border: 1px solid var(--warn); border-radius: 6px; padding: 3px 8px; }
-.steps { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 18px; padding: 0; list-style: none; counter-reset: s; }
-.steps li { counter-increment: s; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px 6px 8px; font-size: 13px; display: flex; align-items: center; gap: 8px; }
-.steps li::before { content: counter(s); display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-weight: 700; font-size: 12px; }
+.demo-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; background: var(--panel); border: 1px dashed var(--line); border-radius: 14px; padding: 10px 14px; margin-bottom: 18px; }
+.demo-bar .lbl { font-family: var(--f-mono); font-size: 11px; color: var(--warn); letter-spacing: .06em; }
+.demo-bar label { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.demo-bar select { width: auto; padding: 6px 10px; font-family: var(--f-body); font-weight: 600; }
+.demo-bar ol { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 0 0 0 auto; padding: 0; list-style: none; counter-reset: s; font-size: 12.5px; color: var(--muted); }
+.demo-bar ol li { counter-increment: s; }
+.demo-bar ol li::before { content: counter(s) ". "; color: var(--accent); font-weight: 700; }
+.banner { background: var(--bad-soft); color: var(--bad); border-radius: 12px; padding: 10px 14px; font-size: 13px; margin-bottom: 16px; }
 
-/* stage */
+/* columns */
 .stage { display: grid; grid-template-columns: minmax(0, 400px) minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: start; }
-@media (max-width: 1200px) { .stage { grid-template-columns: minmax(0, 400px) minmax(0, 1fr); } .col-ov { grid-column: 1 / -1; } }
+@media (max-width: 1200px) { .stage { grid-template-columns: minmax(0, 400px) minmax(0, 1fr); } .col-op { grid-column: 1 / -1; } }
 @media (max-width: 880px) { .stage { grid-template-columns: minmax(0, 1fr); } }
 .col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .col-h { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-family: var(--f-display); font-size: 12.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
 .col-h span:first-child { color: var(--fg); font-weight: 600; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 18px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.card h2 { font-size: 16px; display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.card h2 small { font-family: var(--f-body); font-weight: 400; font-size: 12.5px; color: var(--muted); }
 .kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .kpi { background: var(--panel-2); border-radius: 12px; padding: 12px; min-width: 0; }
 .kpi .k { font-size: 12px; color: var(--muted); }
 .kpi .v { font-family: var(--f-display); font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.25; overflow-wrap: anywhere; }
 .kpi .s { font-size: 11.5px; color: var(--muted); }
-.bars { display: flex; flex-direction: column; gap: 10px; }
-.bar { display: grid; grid-template-columns: 72px minmax(0, 1fr) auto; gap: 10px; align-items: center; font-size: 13px; }
-.bar .tr { height: 10px; background: var(--panel-2); border-radius: 5px; overflow: hidden; }
-.bar .tr i { display: block; height: 100%; border-radius: 5px; }
-.bar .n { font-family: var(--f-mono); font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
-.rej { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
-.rej:last-child { border-bottom: 0; }
-.rej b { font-family: var(--f-mono); }
 
 /* phone */
-.phone { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: 28px; padding: 18px 18px 22px; min-height: 680px; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.phone { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: 28px; padding: 18px 18px 22px; min-height: 640px; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 .phone-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-.who { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.who select { width: auto; padding: 6px 28px 6px 10px; font-family: var(--f-body); font-weight: 600; border-radius: 999px; }
+.hello { font-family: var(--f-display); font-size: 17px; font-weight: 600; }
 .wallet { position: relative; }
 .chip { display: inline-flex; align-items: center; gap: 6px; background: var(--ok-soft); color: var(--ok); border: 0; border-radius: 999px; padding: 6px 12px; font-size: 12.5px; font-family: var(--f-mono); }
 .menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 5; background: var(--panel-3); border: 1px solid var(--line); border-radius: 12px; padding: 6px; display: flex; flex-direction: column; gap: 4px; min-width: 210px; box-shadow: 0 10px 30px rgba(0,0,0,.4); }
@@ -98,15 +101,52 @@ header.top .sub { color: var(--muted); margin: 4px 0 0; max-width: 64ch; }
 
 .balance { background: linear-gradient(160deg, var(--panel-3), var(--panel-2)); border: 1px solid var(--line); border-radius: 20px; padding: 18px; display: flex; flex-direction: column; gap: 12px; }
 .balance .lbl { font-size: 12px; color: var(--muted); }
-.balance .big { font-family: var(--f-display); font-size: 36px; font-weight: 600; letter-spacing: -.02em; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.balance .big { font-family: var(--f-display); font-size: 38px; font-weight: 600; letter-spacing: -.02em; line-height: 1.1; font-variant-numeric: tabular-nums; }
 .bal-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; background: var(--pt-soft); border-radius: 12px; padding: 10px 12px; }
-.bal-row b { color: var(--pt); font-family: var(--f-mono); }
-.assets { font-size: 12.5px; color: var(--muted); font-family: var(--f-mono); }
-.actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
-.act { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 4px; border-radius: 14px; font-size: 12.5px; }
-.act .ic { width: 36px; height: 36px; border-radius: 12px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); }
-.act.main .ic { background: var(--accent); color: #0d1015; }
-.act svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.bal-row b { color: var(--pt); }
+.pay-big { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 16px; font-size: 17px; border-radius: 16px; }
+.pay-big svg, .act svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.act { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 4px; border-radius: 14px; font-size: 12.5px; }
+.act svg { color: var(--accent); }
+.section-t { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; font-weight: 600; color: var(--muted); }
+.activity { display: flex; flex-direction: column; }
+.it { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.it:last-child { border-bottom: 0; }
+.it .d { font-weight: 500; overflow-wrap: anywhere; }
+.it .amt { font-family: var(--f-mono); text-align: right; font-variant-numeric: tabular-nums; }
+.it .amt.plus { color: var(--ok); }
+.it .sub2 { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
+.it .acts { display: flex; gap: 12px; align-items: center; }
+.empty { text-align: center; padding: 24px 12px; display: flex; flex-direction: column; gap: 6px; align-items: center; }
+.empty .big { font-family: var(--f-display); font-size: 17px; margin: 0; }
+
+.agent { border: 1px solid var(--accent); background: var(--accent-soft); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.agent .hd { font-size: 12px; font-weight: 600; color: var(--accent); }
+.agent p { margin: 0; }
+
+.merchant-head { display: flex; flex-direction: column; align-items: center; gap: 6px; padding-top: 4px; }
+.mname { font-family: var(--f-display); font-size: 17px; font-weight: 600; }
+.verify { text-align: center; }
+.verify summary { list-style: none; cursor: pointer; }
+.verify summary::-webkit-details-marker { display: none; }
+.verify[open] .checks { margin-top: 10px; }
+.pay-amount { font-family: var(--f-display); font-size: 44px; font-weight: 600; text-align: center; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.lines { background: var(--panel-2); border-radius: 14px; padding: 12px 14px; display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; font-size: 13.5px; }
+.lines .n { font-family: var(--f-mono); text-align: right; font-variant-numeric: tabular-nums; }
+.lines .tot { border-top: 1px solid var(--line); padding-top: 8px; font-weight: 600; }
+.lines .pt { color: var(--pt); }
+.checks { background: var(--panel-2); border-radius: 14px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; text-align: left; }
+.chk-row { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 0 8px; align-items: center; font-size: 13px; }
+.chk-row .ic2 { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; }
+.chk-row .ic2 svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.chk-row.ok .ic2 { background: var(--ok-soft); color: var(--ok); }
+.chk-row.bad .ic2 { background: var(--bad-soft); color: var(--bad); }
+.chk-row .dt { grid-column: 2; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.chk-row.bad .dt { color: var(--bad); }
+.alert { border-radius: 12px; padding: 12px 14px; font-size: 13.5px; background: var(--bad-soft); color: var(--bad); }
+.done-mark { width: 64px; height: 64px; border-radius: 50%; background: var(--ok-soft); color: var(--ok); display: grid; place-items: center; margin: 8px auto 0; }
+.done-mark svg { width: 34px; height: 34px; fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
 .row-set { display: flex; justify-content: space-between; align-items: center; gap: 12px; background: var(--panel-2); border-radius: 14px; padding: 12px 14px; }
 .row-set .t { font-weight: 600; font-size: 13.5px; }
 .switch { position: relative; width: 44px; height: 26px; flex: none; }
@@ -116,61 +156,7 @@ header.top .sub { color: var(--muted); margin: 4px 0 0; max-width: 64ch; }
 .switch input:checked + span { background: var(--accent); }
 .switch input:checked + span::after { transform: translateX(18px); background: #0d1015; }
 .switch input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
-.section-t { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; font-weight: 600; color: var(--muted); }
-.activity { display: flex; flex-direction: column; }
-.it { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
-.it:last-child { border-bottom: 0; }
-.it .d { font-weight: 500; overflow-wrap: anywhere; }
-.it .amt { font-family: var(--f-mono); text-align: right; font-variant-numeric: tabular-nums; }
-.it .amt.plus { color: var(--ok); }
-.it .sub2 { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
-.it .sub2 .acts { display: flex; gap: 12px; align-items: center; }
-.tx { font-size: 12px; text-decoration: none; white-space: nowrap; }
-.tx:hover { text-decoration: underline; }
-.empty { text-align: center; padding: 28px 12px; display: flex; flex-direction: column; gap: 6px; align-items: center; }
-.empty .big { font-family: var(--f-display); font-size: 17px; margin: 0; }
 
-.agent { border: 1px solid var(--accent); background: var(--accent-soft); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
-.agent .hd { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
-.agent .hd > span { font-size: 12px; font-weight: 600; color: var(--accent); }
-.agent p { margin: 0; }
-
-.merchant-head { display: flex; flex-direction: column; align-items: center; gap: 6px; padding-top: 6px; }
-.mname { font-family: var(--f-display); font-size: 17px; font-weight: 600; }
-.pay-amount { font-family: var(--f-display); font-size: 44px; font-weight: 600; text-align: center; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
-.lines { background: var(--panel-2); border-radius: 14px; padding: 12px 14px; display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; font-size: 13.5px; }
-.lines .n { font-family: var(--f-mono); text-align: right; font-variant-numeric: tabular-nums; }
-.lines .tot { border-top: 1px solid var(--line); padding-top: 8px; font-weight: 600; }
-.lines .pt { color: var(--pt); }
-.alert { border-radius: 12px; padding: 12px 14px; font-size: 13.5px; display: flex; flex-direction: column; gap: 4px; }
-.alert.bad { background: var(--bad-soft); color: var(--bad); }
-.alert .code { font-family: var(--f-mono); font-size: 11px; opacity: .8; }
-.done-mark { width: 64px; height: 64px; border-radius: 50%; background: var(--ok-soft); color: var(--ok); display: grid; place-items: center; margin: 8px auto 0; }
-.done-mark svg { width: 34px; height: 34px; fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
-
-.checks { background: var(--panel-2); border-radius: 14px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
-.checks .hd { display: flex; justify-content: space-between; align-items: center; font-weight: 600; font-size: 13px; }
-.chk-row { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 0 8px; align-items: center; font-size: 13px; }
-.chk-row .ic2 { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; }
-.chk-row .ic2 svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
-.chk-row.ok .ic2 { background: var(--ok-soft); color: var(--ok); }
-.chk-row.bad .ic2 { background: var(--bad-soft); color: var(--bad); }
-.chk-row .dt { grid-column: 2; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
-.chk-row.bad .dt { color: var(--bad); }
-.asset-pick { position: relative; }
-.asset-btn { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; background: var(--panel-2); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; font-weight: 500; }
-.asset-col { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
-.asset-row { display: flex; align-items: center; }
-.pill2 { display: inline-flex; align-items: center; gap: 8px; background: #1a1a1a; border-radius: 12px; padding: 6px 12px 6px 6px; }
-.pill2 .sym { font-family: var(--f-body); font-weight: 600; font-size: 16px; color: #fff; }
-.coin { width: 26px; height: 26px; flex: none; }
-.on { font-size: 12px; color: var(--muted); padding-left: 4px; }
-.chev { width: 36px; height: 36px; border-radius: 10px; background: #1a1a1a; display: grid; place-items: center; flex: none; }
-.chev svg { width: 18px; height: 18px; fill: none; stroke: #fff; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
-.asset-list { position: absolute; left: 0; right: 0; top: calc(100% + 6px); z-index: 5; background: var(--panel-3); border: 1px solid var(--line); border-radius: 14px; padding: 6px; display: flex; flex-direction: column; gap: 4px; box-shadow: 0 10px 30px rgba(0,0,0,.4); }
-.asset-list button { background: transparent; border: 0; border-radius: 10px; padding: 8px; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
-.asset-list button:hover, .asset-list button[aria-selected="true"] { background: var(--panel-2); }
-.field { display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; color: var(--muted); }
 .amount-input { font-family: var(--f-display); font-size: 28px; font-weight: 600; padding: 12px 14px; }
 .chips { display: flex; gap: 6px; flex-wrap: wrap; }
 .chips button { border-radius: 999px; padding: 6px 14px; font-size: 13px; }
@@ -183,26 +169,32 @@ header.top .sub { color: var(--muted); margin: 4px 0 0; max-width: 64ch; }
 .g2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .g3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 
+.asset-pick { position: relative; }
+.asset-btn { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; background: var(--panel-2); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; font-weight: 500; }
+.asset-col { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.pill2 { display: inline-flex; align-items: center; gap: 8px; background: #1a1a1a; border-radius: 12px; padding: 6px 12px 6px 6px; }
+.pill2 .sym { font-weight: 600; font-size: 16px; color: #fff; }
+.coin { width: 26px; height: 26px; flex: none; }
+.on { font-size: 12px; color: var(--muted); padding-left: 4px; }
+.chev { width: 36px; height: 36px; border-radius: 10px; background: #1a1a1a; display: grid; place-items: center; flex: none; }
+.chev svg { width: 18px; height: 18px; fill: none; stroke: #fff; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+.asset-list { position: absolute; left: 0; right: 0; top: calc(100% + 6px); z-index: 5; background: var(--panel-3); border: 1px solid var(--line); border-radius: 14px; padding: 6px; display: flex; flex-direction: column; gap: 4px; box-shadow: 0 10px 30px rgba(0,0,0,.4); }
+.asset-list button { background: transparent; border: 0; border-radius: 10px; padding: 8px; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.asset-list button:hover, .asset-list button[aria-selected="true"] { background: var(--panel-2); }
+
 .toast { position: absolute; left: 18px; right: 18px; bottom: 18px; border-radius: 12px; padding: 12px 14px; font-weight: 500; box-shadow: 0 10px 30px rgba(0,0,0,.4); z-index: 6; }
 .toast.ok { background: #18382a; color: var(--ok); }
 .toast.bad { background: #3a1c1f; color: var(--bad); }
 
-/* cards */
-.card { background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 18px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
-.card h2 { font-size: 17px; display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
-.card h2 small { font-family: var(--f-body); font-weight: 400; font-size: 12.5px; color: var(--muted); }
+/* merchant */
 .pos-qr { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; background: var(--panel-2); border-radius: 14px; padding: 16px; }
-.pos-qr canvas { width: 148px; height: 148px; background: #fff; border-radius: 10px; padding: 8px; image-rendering: pixelated; flex: none; }
-.pos-qr .meta { flex: 1 1 180px; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.pos-qr canvas { width: 140px; height: 140px; background: #fff; border-radius: 10px; padding: 8px; image-rendering: pixelated; flex: none; }
+.pos-qr .meta { flex: 1 1 160px; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
 .pos-qr .amt { font-family: var(--f-display); font-size: 30px; font-weight: 600; }
-details summary { cursor: pointer; color: var(--muted); font-size: 12.5px; }
+details.more summary { cursor: pointer; color: var(--muted); font-size: 12.5px; }
 pre.json { margin: 8px 0 0; font-family: var(--f-mono); font-size: 11.5px; background: var(--panel-2); border-radius: 10px; padding: 10px; overflow-x: auto; color: #c3ccd8; }
 
-/* behind the scenes */
-.behind { margin-top: 36px; display: flex; flex-direction: column; gap: 14px; }
-.behind > h2 { font-size: 18px; }
-.behind-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
-@media (max-width: 880px) { .behind-grid { grid-template-columns: minmax(0, 1fr); } }
+/* operator */
 .kv { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; font-size: 13px; }
 .kv .n { font-family: var(--f-mono); text-align: right; font-variant-numeric: tabular-nums; }
 .meter { grid-column: 1 / -1; height: 6px; background: var(--panel-2); border-radius: 3px; overflow: hidden; }
@@ -212,24 +204,24 @@ table { width: 100%; border-collapse: collapse; font-size: 13px; }
 th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
 th { font-size: 11px; color: var(--muted); font-weight: 500; text-transform: uppercase; letter-spacing: .05em; }
 td.n, th.n { text-align: right; } td.n { font-family: var(--f-mono); }
-.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
-.row > * { min-width: 0; }
-.row .field { flex: 1 1 120px; }
-.err { color: var(--bad); font-size: 12.5px; margin: 0; }
-.log { display: flex; flex-direction: column; gap: 8px; max-height: 520px; overflow-y: auto; }
+.bars { display: flex; flex-direction: column; gap: 10px; }
+.bar { display: grid; grid-template-columns: 72px minmax(0, 1fr) auto; gap: 10px; align-items: center; font-size: 13px; }
+.bar .tr { height: 10px; background: var(--panel-2); border-radius: 5px; overflow: hidden; }
+.bar .tr i { display: block; height: 100%; border-radius: 5px; }
+.bar .n { font-family: var(--f-mono); font-size: 12px; text-align: right; }
+.rej { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; font-size: 13px; }
+.rej b { font-family: var(--f-mono); }
+.log { display: flex; flex-direction: column; gap: 8px; max-height: 360px; overflow-y: auto; margin-top: 10px; }
 .ev { border-left: 3px solid var(--line); padding: 4px 0 4px 10px; display: flex; flex-direction: column; gap: 2px; }
 .ev.ev-ok { border-color: var(--ok); } .ev.ev-bad { border-color: var(--bad); } .ev.ev-skip { border-color: var(--accent); } .ev.ev-pt { border-color: var(--pt); } .ev.ev-sec { border-color: var(--warn); }
 .ev .h { font-family: var(--f-mono); font-size: 11.5px; display: flex; gap: 8px; flex-wrap: wrap; }
 .ev .h .m, .ev .h .t { color: var(--muted); } .ev .h .t { margin-left: auto; }
 .ev .b { font-size: 12.5px; color: #c3ccd8; white-space: pre-line; overflow-wrap: anywhere; }
-.ev .tx { font-family: var(--f-mono); font-size: 11.5px; }
-.banner { background: var(--bad-soft); color: var(--bad); border-radius: 12px; padding: 10px 14px; font-size: 13px; margin-bottom: 16px; }
 
-footer.foot { margin-top: 40px; border-top: 1px solid var(--line); padding-top: 16px; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; font-size: 12.5px; color: var(--muted); }
+footer.foot { margin-top: 36px; border-top: 1px solid var(--line); padding-top: 16px; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; font-size: 12.5px; color: var(--muted); }
 footer.foot a { color: var(--muted); }
-footer.foot .foot-l { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; min-width: 0; }
-.cosmos { font-family: var(--f-display); font-size: 15px; font-weight: 500; letter-spacing: .32em; color: var(--fg); text-decoration: none; white-space: nowrap; }
-footer.foot a.cosmos { color: var(--fg); }
+.foot-l { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; min-width: 0; }
+footer.foot a.cosmos { font-family: var(--f-display); font-size: 15px; font-weight: 500; letter-spacing: .32em; color: var(--fg); text-decoration: none; white-space: nowrap; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
@@ -238,250 +230,217 @@ footer.foot a.cosmos { color: var(--fg); }
   <header class="top">
     <div>
       <h1>Agentic QR Payment</h1>
-      <p class="sub">Pay at approved cafes and restaurants from your own USDC.inj vault, earn points, and turn them into ATOM, INJ or USDC.inj. ATOM always gives the most per point.</p>
+      <p class="sub">Pay approved cafes and restaurants from your own balance, earn points, and turn them into ATOM.</p>
     </div>
-    <div class="hdr-r">
-      <span class="sim">SIMULATION · NO ON-CHAIN TX</span>
-    </div>
+    <span class="sim">SIMULATION · NO ON-CHAIN TX</span>
   </header>
 
-  <ol class="steps" aria-label="Demo steps">
-    <li>Show a payment QR on the merchant POS</li>
-    <li>Tap Pay in the app and confirm</li>
-    <li>Turn your points into ATOM</li>
-  </ol>
+  <div class="demo-bar" aria-label="Demo controls">
+    <span class="lbl">DEMO CONTROLS</span>
+    <label for="user-sel">Acting as <select id="user-sel"></select></label>
+    <button id="demo-forge" class="sm danger" disabled>Forge current QR ($1.00)</button>
+    <ol>
+      <li>Show a QR on the POS</li>
+      <li>Pay in the app</li>
+      <li>Redeem points for ATOM</li>
+    </ol>
+  </div>
 
-  <div id="paused" class="banner" hidden>Rewards are paused by the operator. Payments without points and withdrawals still work; your balance cannot be frozen.</div>
+  <div id="paused" class="banner" hidden>Rewards are paused. Payments without points and withdrawals still work.</div>
 
   <div class="stage">
     <!-- CUSTOMER -->
     <div class="col">
-    <div class="col-h"><span>Customer</span><span>user app</span></div>
-    <div class="phone" aria-label="Customer app">
-      <div class="phone-top">
-        <div class="who">
-          <label for="user-sel" class="note">Demo user</label>
-          <select id="user-sel"></select>
-        </div>
-        <div class="wallet">
-          <button id="w-open" class="sm primary">Connect wallet</button>
-          <button id="w-chip" class="chip" hidden><span id="w-chip-label"></span></button>
-          <div id="w-menu" class="menu" hidden>
-            <button id="w-keplr">Keplr<small>Injective + Cosmos Hub address</small></button>
-            <button id="w-mm">MetaMask<small>0x address shown as inj1</small></button>
-            <button id="w-off" hidden>Disconnect<small>Back to demo address</small></button>
-          </div>
-        </div>
-      </div>
-
-      <!-- HOME -->
-      <div class="screen" id="v-home">
-        <div class="balance">
-          <div>
-            <div class="lbl">Balance · your vault</div>
-            <div class="big" id="bal-usdc">$0.00</div>
-            <div class="assets" id="bal-assets"></div>
-          </div>
-          <div class="bal-row">
-            <span>Points <b id="bal-pt">0 P</b> <span class="note" id="bal-pt-usd"></span></span>
-            <button class="sm" data-go="redeem">Redeem</button>
+      <div class="col-h"><span>Customer</span><span>app</span></div>
+      <div class="phone" aria-label="Customer app">
+        <div class="phone-top">
+          <span class="hello" id="hello"></span>
+          <div class="wallet">
+            <button id="w-open" class="sm primary">Connect wallet</button>
+            <button id="w-chip" class="chip" hidden><span id="w-chip-label"></span></button>
+            <div id="w-menu" class="menu" hidden>
+              <button id="w-keplr">Keplr<small>Injective and Cosmos Hub</small></button>
+              <button id="w-mm">MetaMask<small>EVM address on Injective</small></button>
+              <button id="w-off" hidden>Disconnect<small>Use the demo address</small></button>
+            </div>
           </div>
         </div>
 
-        <div class="actions">
-          <button class="act main" data-go="pay"><span class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4v-3"/></svg></span>Pay</button>
-          <button class="act" data-go="topup"><span class="ic"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span>Top up</button>
-          <button class="act" data-go="redeem"><span class="ic"><svg viewBox="0 0 24 24"><path d="M7 7h11l-3-3M17 17H6l3 3"/></svg></span>Redeem</button>
-          <button class="act" data-go="withdraw"><span class="ic"><svg viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></svg></span>Withdraw</button>
-        </div>
-
-        <div class="row-set">
-          <div><div class="t">Tap to pay</div><p class="note" id="fp-note"></p></div>
-          <label class="switch" aria-label="Tap to pay"><input type="checkbox" id="fp-toggle"><span></span></label>
-        </div>
-
-        <div id="home-agent"></div>
-
-        <div class="section-t"><span>Recent activity</span><button class="link" data-go="settings">Settings</button></div>
-        <div class="activity" id="activity"></div>
-      </div>
-
-      <!-- PAY -->
-      <div class="screen" id="v-pay" hidden>
-        <div class="scr-head"><button class="back" data-go="home" aria-label="Back">&larr;</button><h2>Pay</h2></div>
-        <div id="pay-body" class="screen"></div>
-      </div>
-
-      <!-- TOP UP -->
-      <div class="screen" id="v-topup" hidden>
-        <div class="scr-head"><button class="back" data-go="home" aria-label="Back">&larr;</button><h2>Top up</h2><a class="skip" href="https://go.skip.build/" target="_blank" rel="noopener">by <span class="sg">skip<b>:</b>go</span></a></div>
-        <label class="field">Amount (USDC)<input id="tu-amt" class="amount-input" type="number" min="1" step="0.01" value="30" inputmode="decimal"></label>
-        <div class="chips"><button data-amt="10">$10</button><button data-amt="30">$30</button><button data-amt="50">$50</button><button data-amt="100">$100</button></div>
-        <div class="field"><span>From</span>
-          <div class="asset-pick">
-            <button id="tu-asset" class="asset-btn" aria-haspopup="listbox" aria-expanded="false"></button>
-            <div id="tu-list" class="asset-list" role="listbox" hidden></div>
+        <!-- HOME -->
+        <div class="screen" id="v-home">
+          <div class="balance">
+            <div>
+              <div class="lbl">Balance</div>
+              <div class="big" id="bal-usdc">$0.00</div>
+              <div class="note" id="bal-assets"></div>
+            </div>
+            <div class="bal-row">
+              <span><b id="bal-pt">0 points</b> <span class="note" id="bal-pt-usd"></span></span>
+              <button class="sm" data-go="redeem">Redeem</button>
+            </div>
           </div>
+          <button class="primary pay-big" data-go="pay"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4v-3"/></svg>Pay</button>
+          <div class="actions">
+            <button class="act" data-go="topup"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Top up</button>
+            <button class="act" data-go="redeem"><svg viewBox="0 0 24 24"><path d="M7 7h11l-3-3M17 17H6l3 3"/></svg>Redeem</button>
+            <button class="act" data-go="withdraw"><svg viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></svg>Withdraw</button>
+          </div>
+          <div id="home-agent"></div>
+          <div class="section-t"><span>Recent</span><button class="link" data-go="settings">Settings</button></div>
+          <div class="activity" id="activity"></div>
         </div>
-        <div id="tu-quote"></div>
-        <button id="tu-go" class="primary block">Top up</button>
-        <p class="note center">Skip:Go finds the route. Your wallet signs, and the funds go straight into your vault.</p>
-      </div>
 
-      <!-- REDEEM -->
-      <div class="screen" id="v-redeem" hidden>
-        <div class="scr-head"><button class="back" data-go="home" aria-label="Back">&larr;</button><h2>Redeem points</h2><a class="skip" href="https://go.skip.build/" target="_blank" rel="noopener">by <span class="sg">skip<b>:</b>go</span></a></div>
-        <label class="field"><span>Points to redeem · <span id="rd-avail"></span></span>
-          <div class="row"><input id="rd-pt" class="amount-input" type="number" min="1" step="1" inputmode="numeric" style="flex:1 1 140px"><button id="rd-max" class="sm">Max</button></div>
-        </label>
-        <div class="opts" id="rd-opts"></div>
-        <button id="rd-go" class="primary block">Redeem</button>
-        <p class="note center">Paid from the reward pool, not from your balance. ATOM is swapped and sent to your Cosmos Hub wallet through Skip:Go.</p>
-      </div>
-
-      <!-- WITHDRAW -->
-      <div class="screen" id="v-withdraw" hidden>
-        <div class="scr-head"><button class="back" data-go="home" aria-label="Back">&larr;</button><h2>Withdraw</h2></div>
-        <label class="field"><span>Amount (USDC.inj) · <span id="wd-avail"></span></span>
-          <div class="row"><input id="wd-amt" class="amount-input" type="number" min="0.01" step="0.01" inputmode="decimal" style="flex:1 1 140px"><button id="wd-max" class="sm">Max</button></div>
-        </label>
-        <div class="lines"><span>To</span><span class="n" id="wd-to"></span></div>
-        <button id="wd-go" class="primary block">Withdraw to my wallet</button>
-        <p class="note center">Only you can withdraw. No limit or pause applies.</p>
-      </div>
-
-      <!-- SETTINGS -->
-      <div class="screen" id="v-settings" hidden>
-        <div class="scr-head"><button class="back" data-go="home" aria-label="Back">&larr;</button><h2>Settings</h2></div>
-        <div class="section-t"><span>Tap to pay limits</span></div>
-        <div class="g2">
-          <label class="field">Per payment (USDC)<input id="st-ptx" type="number" min="1" step="1"></label>
-          <label class="field">Per day (USDC)<input id="st-day" type="number" min="1" step="1"></label>
+        <!-- PAY -->
+        <div class="screen" id="v-pay" hidden>
+          <div class="scr-head"><button class="back" data-go="home" aria-label="Back">&larr;</button><h2>Pay</h2></div>
+          <div id="pay-body" class="screen"></div>
         </div>
-        <div class="section-t"><span>Auto-redeem points</span></div>
-        <div class="row-set">
-          <div><div class="t">Convert automatically</div><p class="note">After a payment, once you reach the threshold</p></div>
-          <label class="switch" aria-label="Auto-redeem"><input type="checkbox" id="st-auto"><span></span></label>
-        </div>
-        <label class="field">Threshold (points)<input id="st-min" type="number" min="1" step="1"></label>
-        <div class="g3">
-          <label class="field">ATOM<input id="st-w-atom" type="number" min="0" max="1" step="0.05"></label>
-          <label class="field">USDC.inj<input id="st-w-usdc" type="number" min="0" max="1" step="0.05"></label>
-          <label class="field">INJ<input id="st-w-inj" type="number" min="0" max="1" step="0.05"></label>
-        </div>
-        <p class="note">Split must add up to 1.</p>
-        <p class="err" id="st-err" hidden></p>
-        <button id="st-save" class="primary block">Save</button>
-      </div>
 
-      <div id="toast" class="toast" role="status" hidden></div>
-    </div>
+        <!-- TOP UP -->
+        <div class="screen" id="v-topup" hidden>
+          <div class="scr-head"><button class="back" data-go="home" aria-label="Back">&larr;</button><h2>Top up</h2><a class="skip" href="https://go.skip.build/" target="_blank" rel="noopener">by <span class="sg">skip<b>:</b>go</span></a></div>
+          <label class="field">Amount<input id="tu-amt" class="amount-input" type="number" min="1" step="0.01" value="30" inputmode="decimal"></label>
+          <div class="chips"><button data-amt="10">$10</button><button data-amt="30">$30</button><button data-amt="50">$50</button><button data-amt="100">$100</button></div>
+          <div class="field"><span>From</span>
+            <div class="asset-pick">
+              <button id="tu-asset" class="asset-btn" aria-haspopup="listbox" aria-expanded="false"></button>
+              <div id="tu-list" class="asset-list" role="listbox" hidden></div>
+            </div>
+          </div>
+          <div id="tu-quote"></div>
+          <button id="tu-go" class="primary block">Top up</button>
+        </div>
+
+        <!-- REDEEM -->
+        <div class="screen" id="v-redeem" hidden>
+          <div class="scr-head"><button class="back" data-go="home" aria-label="Back">&larr;</button><h2>Redeem points</h2><a class="skip" href="https://go.skip.build/" target="_blank" rel="noopener">by <span class="sg">skip<b>:</b>go</span></a></div>
+          <label class="field"><span>Points · <span id="rd-avail"></span></span>
+            <div class="row"><input id="rd-pt" class="amount-input" type="number" min="1" step="1" inputmode="numeric" style="flex:1 1 140px"><button id="rd-max" class="sm">Max</button></div>
+          </label>
+          <div class="opts" id="rd-opts"></div>
+          <button id="rd-go" class="primary block">Redeem</button>
+          <p class="note center">Paid from the rewards pool, not from your balance.</p>
+        </div>
+
+        <!-- WITHDRAW -->
+        <div class="screen" id="v-withdraw" hidden>
+          <div class="scr-head"><button class="back" data-go="home" aria-label="Back">&larr;</button><h2>Withdraw</h2></div>
+          <label class="field"><span>Amount · <span id="wd-avail"></span></span>
+            <div class="row"><input id="wd-amt" class="amount-input" type="number" min="0.01" step="0.01" inputmode="decimal" style="flex:1 1 140px"><button id="wd-max" class="sm">Max</button></div>
+          </label>
+          <div class="lines"><span>To your wallet</span><span class="n" id="wd-to"></span></div>
+          <button id="wd-go" class="primary block">Withdraw</button>
+          <p class="note center">Only you can withdraw. Nothing can block it.</p>
+        </div>
+
+        <!-- SETTINGS -->
+        <div class="screen" id="v-settings" hidden>
+          <div class="scr-head"><button class="back" data-go="home" aria-label="Back">&larr;</button><h2>Settings</h2></div>
+          <div class="row-set">
+            <div><div class="t">Tap to pay</div><p class="note" id="fp-note"></p></div>
+            <label class="switch" aria-label="Tap to pay"><input type="checkbox" id="fp-toggle"><span></span></label>
+          </div>
+          <div class="g2">
+            <label class="field">Max per payment ($)<input id="st-ptx" type="number" min="1" step="1"></label>
+            <label class="field">Max per day ($)<input id="st-day" type="number" min="1" step="1"></label>
+          </div>
+          <label class="field">Suggest redeeming at (points)<input id="st-min" type="number" min="1" step="1"></label>
+          <p class="note">Suggestions only. Points are redeemed only when you choose to.</p>
+          <p class="err" id="st-err" hidden></p>
+          <button id="st-save" class="primary block">Save</button>
+        </div>
+
+        <div id="toast" class="toast" role="status" hidden></div>
+      </div>
     </div>
 
     <!-- MERCHANT -->
     <div class="col">
-    <div class="col-h"><span>Merchant</span><span>POS and store dashboard</span></div>
-    <div class="card" aria-label="Merchant POS">
-      <h2>Merchant POS <small>approved stores only</small></h2>
-      <div class="row">
-        <label class="field">Store<select id="pos-merchant"></select></label>
-        <label class="field">Amount (USDC)<input id="pos-amt" type="number" min="0.01" step="0.01" value="12.50" inputmode="decimal"></label>
-      </div>
-      <button id="pos-gen" class="primary block">Show payment QR</button>
-      <p class="err" id="pos-err" hidden></p>
-      <div id="pos-qr" class="pos-qr" hidden>
-        <canvas id="qr" width="29" height="29" aria-label="Payment QR pattern"></canvas>
-        <div class="meta">
-          <span class="note" id="pos-store"></span>
-          <span class="amt" id="pos-amount"></span>
-          <span id="pos-status"></span>
-          <span class="note">Demo pattern, not a scannable QR. Use Pay in the app.</span>
+      <div class="col-h"><span>Merchant</span><span>POS</span></div>
+      <div class="card" aria-label="Merchant POS">
+        <div class="row">
+          <label class="field">Store<select id="pos-merchant"></select></label>
+          <label class="field">Amount ($)<input id="pos-amt" type="number" min="0.01" step="0.01" value="12.50" inputmode="decimal"></label>
         </div>
+        <button id="pos-gen" class="primary block">Show payment QR</button>
+        <p class="err" id="pos-err" hidden></p>
+        <div id="pos-qr" class="pos-qr" hidden>
+          <canvas id="qr" width="29" height="29" aria-label="Payment QR pattern"></canvas>
+          <div class="meta">
+            <span class="note" id="pos-store"></span>
+            <span class="amt" id="pos-amount"></span>
+            <span id="pos-status"></span>
+            <span class="note">Demo pattern. Pay with the app.</span>
+          </div>
+        </div>
+        <details class="more" id="pos-details" hidden><summary>Signed QR data</summary><pre class="json" id="qr-json"></pre></details>
       </div>
-      <div class="row" id="pos-tools" hidden>
-        <button id="pos-tamper" class="sm danger">Forge this QR: change amount to $1.00</button>
-        <span class="note">The signature stays the same, so the app rejects it.</span>
+
+      <div class="card" aria-label="Store today">
+        <h2><span id="md-title">Store</span><span id="md-status"></span></h2>
+        <div class="kpis" id="md-kpis"></div>
+        <div class="section-t"><span>Recent payments</span></div>
+        <div class="activity" id="md-list"></div>
       </div>
-      <details id="pos-details" hidden><summary>QR payload and store key</summary><pre class="json" id="qr-json"></pre></details>
     </div>
 
-    <div class="card" aria-label="Store dashboard">
-      <h2><span id="md-title">Store</span><span id="md-status"></span></h2>
-      <div class="kpis" id="md-kpis"></div>
-      <div class="section-t"><span>Recent payments</span></div>
-      <div class="activity" id="md-list"></div>
-    </div>
-    </div>
+    <!-- OPERATOR -->
+    <div class="col col-op">
+      <div class="col-h"><span>Operator</span><span>all users and stores</span></div>
+      <div class="card">
+        <div class="kpis" id="op-kpis"></div>
+      </div>
 
-    <!-- OVERVIEW -->
-    <div class="col col-ov">
-    <div class="col-h"><span>Overview</span><span>all users and stores</span></div>
-    <div class="card" aria-label="Overview">
-      <h2>Platform totals</h2>
-      <div class="kpis" id="ov-kpis"></div>
-    </div>
-    <div class="card">
-      <h2>Points redeemed <small id="ov-atom-share"></small></h2>
-      <div class="bars" id="ov-bars"></div>
-    </div>
-    <div class="card">
-      <h2>Stores</h2>
-      <div class="tw"><table id="ov-stores"></table></div>
-    </div>
-    <div class="card">
-      <h2>Blocked payments</h2>
-      <div id="ov-rejected"></div>
-    </div>
-    </div>
-  </div>
+      <div class="card">
+        <h2>Points redeemed <small id="op-atom-share"></small></h2>
+        <div class="bars" id="op-bars"></div>
+      </div>
 
-  <!-- BEHIND THE SCENES -->
-  <section class="behind">
-    <h2>Behind the scenes</h2>
-    <div class="behind-grid">
-      <section class="card">
-        <h2>Reward pool <small>separate from user balances</small></h2>
+      <div class="card">
+        <h2>Rewards pool <small>separate from user balances</small></h2>
         <div class="kv">
           <span>Pool balance</span><span class="n" id="rp-bal"></span>
           <span>Points outstanding</span><span class="n" id="rp-liab"></span>
           <span>Coverage</span><span class="n" id="rp-cov"></span>
           <div class="meter"><i id="rp-m"></i></div>
           <span>In: merchant fees</span><span class="n" id="rp-in"></span>
-          <span>Out: point discounts</span><span class="n" id="rp-disc"></span>
-          <span>Out: redemptions</span><span class="n" id="rp-out"></span>
-          <span>All user vaults</span><span class="n" id="rp-vaults"></span>
-          <span>Gas pool (feegrant)</span><span class="n" id="fg-bal"></span>
+          <span>Out: discounts and redemptions</span><span class="n" id="rp-out"></span>
         </div>
         <div class="row">
-          <label class="field">Daily redeem cap per user (USD)<input id="rp-cap" type="number" min="1" step="1" value="50"></label>
+          <label class="field">Daily redeem cap per user ($)<input id="rp-cap" type="number" min="1" step="1" value="50"></label>
           <button id="rp-apply" class="sm">Apply</button>
         </div>
         <div class="row"><button id="rp-fund" class="sm">Add $200 budget</button><button id="rp-pause" class="sm danger">Pause rewards</button></div>
-      </section>
+        <details class="more">
+          <summary>Redeem bonus</summary>
+          <div class="g3" style="margin-top:10px">
+            <label class="field">ATOM %<input id="bs-atom" type="number" min="0" max="50" step="1" value="10"></label>
+            <label class="field">USDC.inj %<input id="bs-usdc" type="number" min="0" max="50" step="1" value="0"></label>
+            <label class="field">INJ %<input id="bs-inj" type="number" min="0" max="50" step="1" value="5"></label>
+          </div>
+          <p class="note" style="margin-top:6px">ATOM must stay the best value after route cost.</p>
+          <p class="err" id="bs-err" hidden></p>
+          <button id="bs-save" class="sm" style="margin-top:8px">Apply bonus</button>
+        </details>
+      </div>
 
-      <section class="card">
-        <h2>Redeem bonus <small>ATOM must stay the best value</small></h2>
-        <div class="g3">
-          <label class="field">ATOM %<input id="bs-atom" type="number" min="0" max="50" step="1" value="10"></label>
-          <label class="field">USDC.inj %<input id="bs-usdc" type="number" min="0" max="50" step="1" value="0"></label>
-          <label class="field">INJ %<input id="bs-inj" type="number" min="0" max="50" step="1" value="5"></label>
-        </div>
-        <p class="note">USDC.inj gets +1% points on the next payment instead of a bonus.</p>
-        <p class="err" id="bs-err" hidden></p>
-        <button id="bs-save" class="sm">Apply bonus</button>
-      </section>
+      <div class="card">
+        <h2>Stores <small>click status to approve or suspend</small></h2>
+        <div class="tw"><table id="op-stores"></table></div>
+      </div>
 
-      <section class="card">
-        <h2>Merchant registry <small>click status to approve or suspend</small></h2>
-        <div class="tw"><table id="wl"></table></div>
-      </section>
-
-      <section class="card">
-        <h2>On-chain activity <small>simulated hashes, Mintscan shows not found</small></h2>
-        <div class="log" id="log"></div>
-      </section>
+      <div class="card">
+        <details class="more">
+          <summary>Blocked payments by reason</summary>
+          <div id="op-rejected" style="margin-top:8px"></div>
+        </details>
+        <details class="more">
+          <summary>On-chain activity (simulated, links show not found on Mintscan)</summary>
+          <div class="log" id="log"></div>
+        </details>
+      </div>
     </div>
-  </section>
+  </div>
 
   <footer class="foot">
     <div class="foot-l">
@@ -497,23 +456,23 @@ footer.foot a.cosmos { color: var(--fg); }
   const MICRO = 1_000_000;
   const MINTSCAN = "https://www.mintscan.io/injective/tx/";
   const FRIENDLY = {
-    ERR_MERCHANT_NOT_WHITELISTED: "This store is not an approved merchant. Nothing was charged.",
+    ERR_MERCHANT_NOT_WHITELISTED: "This store is not approved. Nothing was charged.",
     ERR_QR_EXPIRED: "This QR code expired. Ask the store for a new one.",
     ERR_ORDER_ALREADY_PAID: "This order is already paid.",
     ERR_UNKNOWN_QR: "No payment QR found. Ask the store to show one.",
-    ERR_SESSION_TX_LIMIT: "This is over your tap-to-pay limit per payment. Raise it in Settings.",
+    ERR_BAD_SIGNATURE: "This QR code was altered or not issued by the store. Nothing was charged.",
+    ERR_BAD_QR: "This QR code is not valid. Ask the store for a new one.",
+    ERR_SESSION_TX_LIMIT: "Over your tap-to-pay limit per payment. Raise it in Settings.",
     ERR_SESSION_DAILY_LIMIT: "You reached today's tap-to-pay limit. Raise it in Settings.",
     ERR_INSUFFICIENT_VAULT: "Not enough balance. Top up first.",
-    ERR_POOL_INSUFFICIENT: "Rewards are temporarily unavailable. Try without points.",
+    ERR_POOL_INSUFFICIENT: "Rewards are unavailable right now. Pay without points.",
     ERR_POOL_PAUSED: "Rewards are paused right now. Your balance is safe.",
-    ERR_DAILY_REDEEM_CAP: "You reached today's redeem limit. Try a smaller amount.",
+    ERR_DAILY_REDEEM_CAP: "You reached today's redeem limit. Try fewer points.",
     ERR_INSUFFICIENT_POINT: "You don't have that many points.",
     ERR_BAD_AMOUNT: "Enter an amount above 0.",
     ERR_ATOM_NOT_FAVORED: "ATOM must stay the best value. Raise the ATOM bonus.",
-    ERR_REFUND_WINDOW_CLOSED: "This payment can no longer be cancelled.",
+    ERR_REFUND_WINDOW_CLOSED: "This payment can no longer be refunded.",
     ERR_BAD_POLICY: "Check the values and try again.",
-    ERR_BAD_SIGNATURE: "This QR code was altered or not issued by the store. Nothing was charged.",
-    ERR_BAD_QR: "This QR code is not valid. Ask the store for a new one.",
   };
   let S = null, cur = 0, qr = null, posPaid = false, timerId = null;
   let usePts = true, payDone = null, lastAgent = null, redeemTarget = "ATOM", tuTimer = null;
@@ -528,7 +487,9 @@ footer.foot a.cosmos { color: var(--fg); }
   const friendly = e => (e && FRIENDLY[e.code]) || (e && e.message) || String(e);
   const showErr = (id, e) => { const el = $(id); el.textContent = e ? friendly(e) : ""; el.hidden = !e; };
   const amt = (asset, v) => v.toFixed(asset === "USDC_INJ" ? 2 : 4);
-  const txLink = (h, label) => /^[0-9A-F]{64}$/.test(h || "") ? `<a class="tx" href="${MINTSCAN}${h}" target="_blank" rel="noopener">${label || "Tx " + h.slice(0, 8) + "…"} ↗</a>` : "";
+  const txLink = (h, label = "View transaction") => /^[0-9A-F]{64}$/.test(h || "") ? `<a class="tx" href="${MINTSCAN}${h}" target="_blank" rel="noopener">${label} ↗</a>` : "";
+  const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
+  const kpi = (k, v, s) => `<div class="kpi"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div>${s ? `<div class="s">${esc(s)}</div>` : ""}</div>`;
 
   async function api(method, path, body) {
     const r = await fetch(path, { method, headers: body ? { "Content-Type": "application/json" } : {}, body: body ? JSON.stringify(body) : undefined });
@@ -537,7 +498,6 @@ footer.foot a.cosmos { color: var(--fg); }
     return j;
   }
   async function refresh() { S = await api("GET", "/api/state"); render(); }
-
   function toast(msg, kind = "ok") {
     const t = $("toast");
     t.textContent = msg; t.className = "toast " + kind; t.hidden = false;
@@ -558,7 +518,8 @@ footer.foot a.cosmos { color: var(--fg); }
     const g = e.target.closest("[data-go]");
     if (g) { if (g.dataset.go === "home") payDone = null; go(g.dataset.go); }
     const ar = e.target.closest("[data-agent-redeem]");
-    if (ar) agentRedeem(Number(ar.dataset.agentRedeem));
+    if (ar) reviewRedeem(Number(ar.dataset.agentRedeem));
+    if (e.target.closest("[data-dismiss-agent]")) { lastAgent = null; render(); if (payDone) renderPay(); }
     if (!e.target.closest(".wallet")) $("w-menu").hidden = true;
     if (!e.target.closest(".asset-pick")) $("tu-list").hidden = true;
   });
@@ -567,21 +528,19 @@ footer.foot a.cosmos { color: var(--fg); }
   function render() {
     const u = U();
     $("user-sel").innerHTML = S.users.map((x, i) => `<option value="${i}" ${i === cur ? "selected" : ""}>${esc(x.name)}</option>`).join("");
+    $("hello").textContent = "Hi, " + u.name;
     renderWallet();
     $("bal-usdc").textContent = "$" + fmtU(u.usdc_micro);
     $("bal-assets").textContent = `${u.atom.toFixed(4)} ATOM · ${u.inj.toFixed(4)} INJ`;
-    $("bal-pt").textContent = fmtP(u.points) + " P";
+    $("bal-pt").textContent = fmtP(u.points) + " points";
     $("bal-pt-usd").textContent = "≈ $" + (u.points / 100).toFixed(2);
-    const s = u.session;
-    $("fp-toggle").checked = s.active;
-    $("fp-note").textContent = s.active ? `No wallet popup · $${fmtU(s.spent_today_micro)} of $${fmtU(s.daily_micro)} used today` : "Off · your wallet asks to sign each payment";
     $("home-agent").innerHTML = lastAgent && lastAgent.user === cur ? agentHTML(lastAgent.card) : "";
     renderActivity();
     renderPos();
-    renderMerchantDash();
-    renderOverview();
-    renderBehind();
+    renderMerchant();
+    renderOperator();
     $("paused").hidden = !S.pool.paused;
+    $("demo-forge").disabled = !qr || posPaid;
   }
 
   function renderWallet() {
@@ -595,32 +554,26 @@ footer.foot a.cosmos { color: var(--fg); }
 
   function renderActivity() {
     const h = U().history;
-    if (!h.length) { $("activity").innerHTML = `<div class="empty"><p class="note">No activity yet. Top up or pay at a store.</p></div>`; return; }
-    $("activity").innerHTML = h.slice(0, 8).map(e => {
+    if (!h.length) { $("activity").innerHTML = `<div class="empty"><p class="note">Nothing yet. Top up or pay at a store.</p></div>`; return; }
+    $("activity").innerHTML = h.slice(0, 4).map(e => {
       const label = { PAY: "Paid", TOPUP: "Top up", REDEEM: "Redeemed", WITHDRAW: "Withdrawal", REFUND: "Refund" }[e.type] || e.type;
-      const status = e.status === "CANCELLED" ? `<span class="pill bad">Cancelled</span>` : e.refundable ? `<button class="link" data-refund="${e.id}">Cancel payment</button>` : "";
-      return `<div class="it"><span class="d">${esc(label)} · ${esc(e.desc)}</span><span class="amt ${e.credit ? "plus" : ""}">${esc(e.delta)}</span><span class="sub2"><span>${hhmm(e.time)}${e.note ? " · " + esc(e.note) : ""}</span><span class="acts">${txLink(e.tx_hash, "Mintscan")}${status}</span></span></div>`;
+      const status = e.status === "CANCELLED" ? `<span class="pill bad">Refunded</span>` : "";
+      return `<div class="it"><span class="d">${esc(label)} · ${esc(e.desc)}</span><span class="amt ${e.credit ? "plus" : ""}">${esc(e.delta)}</span><span class="sub2"><span>${hhmm(e.time)}</span><span class="acts">${status}${txLink(e.tx_hash)}</span></span></div>`;
     }).join("");
-    $("activity").querySelectorAll("[data-refund]").forEach(b => b.onclick = async () => {
-      try { await api("POST", "/api/refund", { user: cur, history_id: Number(b.dataset.refund) }); toast("Payment cancelled and refunded"); }
-      catch (e) { toast(friendly(e), "bad"); }
-      await refresh();
-    });
   }
 
+  // ---------- agent (suggestions only) ----------
   function agentHTML(a) {
-    const lines = (a.lines || []).map(esc).join("<br>");
-    const title = a.kind === "auto" ? "Agent converted your points" : a.kind === "suggest" ? "Agent suggestion" : "Agent";
-    const mark = a.kind !== "info" ? '<a class="skip" href="https://go.skip.build/" target="_blank" rel="noopener">by <span class="sg">skip<b>:</b>go</span></a>' : "";
-    return `<div class="agent"><div class="hd"><span>${title}</span>${mark}</div><p>${esc(a.message)}</p>${lines ? `<p>${lines}</p>` : ""}${a.kind === "suggest" ? `<button class="primary" data-agent-redeem="${a.points}">Convert ${fmtP(a.points)} P to ATOM</button>` : ""}</div>`;
+    const actions = a.kind === "suggest"
+      ? `<div class="row"><button class="primary" data-agent-redeem="${a.points}">Review redeem</button><button data-dismiss-agent>Keep points</button></div>`
+      : "";
+    return `<div class="agent"><span class="hd">${a.kind === "suggest" ? "Suggestion" : "Tip"}</span><p>${esc(a.message)}</p>${actions}</div>`;
   }
-  async function agentRedeem(points) {
-    try {
-      const q = await api("POST", "/api/redeem", { user: cur, points, target: "ATOM", source: "agent card" });
-      lastAgent = { user: cur, card: { kind: "info", message: `Done. ${amt("ATOM", q.amount)} ATOM is on its way to your Cosmos Hub wallet.` } };
-      toast(`Converted ${fmtP(points)} P to ${amt("ATOM", q.amount)} ATOM`);
-    } catch (e) { toast(friendly(e), "bad"); }
-    payDone = null; go("home"); await refresh();
+  function reviewRedeem(points) {
+    payDone = null; lastAgent = null; redeemTarget = "ATOM";
+    go("redeem");
+    $("rd-pt").value = points;
+    renderRedeem();
   }
 
   // ---------- wallet ----------
@@ -644,7 +597,7 @@ footer.foot a.cosmos { color: var(--fg); }
     try {
       const [eth] = await window.ethereum.request({ method: "eth_requestAccounts" });
       await api("POST", "/api/wallet/connect", { user: cur, wallet: "metamask", eth_addr: eth.toLowerCase() });
-      toast("MetaMask connected. ATOM still goes to a demo Cosmos address.");
+      toast("MetaMask connected. ATOM goes to a demo Cosmos address.");
     } catch (e) { toast(friendly(e), "bad"); }
     await refresh();
   };
@@ -653,63 +606,53 @@ footer.foot a.cosmos { color: var(--fg); }
     await api("POST", "/api/wallet/disconnect", { user: cur }).catch(e => toast(friendly(e), "bad"));
     await refresh();
   };
-
-  $("user-sel").onchange = e => { cur = Number(e.target.value); payDone = null; go("home"); render(); };
-  $("fp-toggle").onchange = async e => {
-    try {
-      await api("POST", "/api/session", { user: cur, active: e.target.checked });
-      toast(e.target.checked ? "Tap to pay is on" : "Tap to pay is off. Your wallet will ask each time.");
-    } catch (x) { toast(friendly(x), "bad"); }
-    await refresh();
-  };
+  $("user-sel").onchange = e => { cur = Number(e.target.value); payDone = null; lastAgent = null; go("home"); render(); };
 
   // ---------- pay ----------
+  const ICON_OK = '<svg viewBox="0 0 24 24"><path d="M5 12l5 5L19 7"/></svg>';
+  const ICON_BAD = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+  function verifyHTML(v) {
+    const badge = v.valid ? '<span class="pill ok">Verified store</span>' : '<span class="pill bad">Verification failed</span>';
+    const rows = v.checks.map(c => `<div class="chk-row ${c.ok ? "ok" : "bad"}"><span class="ic2">${c.ok ? ICON_OK : ICON_BAD}</span><span>${esc(c.name)}</span><span class="dt">${esc(c.detail)}</span></div>`).join("");
+    return `<details class="verify" ${v.valid ? "" : "open"}><summary>${badge} <span class="note">details</span></summary><div class="checks">${rows}</div></details>`;
+  }
   async function renderPay() {
     const b = $("pay-body");
     if (payDone) {
       const x = payDone;
-      b.innerHTML = `<div class="done-mark"><svg viewBox="0 0 24 24"><path d="M5 12l5 5L19 7"/></svg></div>
+      b.innerHTML = `<div class="done-mark">${ICON_OK}</div>
         <div class="center"><div class="pay-amount">$${fmtU(x.paid_micro)}</div><p class="note">paid to ${esc(x.merchant)}</p></div>
         <div class="lines">
-          <span>Order total</span><span class="n">$${fmtU(x.amount_micro)}</span>
-          <span>Points used</span><span class="n">${fmtP(x.points_used)} P (−$${fmtU(x.point_discount_micro)})</span>
-          <span class="pt">Points earned</span><span class="n pt">+${fmtP(x.points_earned)} P</span>
+          <span>Order</span><span class="n">$${fmtU(x.amount_micro)}</span>
+          <span>Points used</span><span class="n">−$${fmtU(x.point_discount_micro)}</span>
+          <span class="pt">Points earned</span><span class="n pt">+${fmtP(x.points_earned)}</span>
         </div>
-        <p class="center">${txLink(x.tx_hash, "View on Mintscan")}</p>
+        <p class="center">${txLink(x.tx_hash)}</p>
         ${lastAgent && lastAgent.user === cur ? agentHTML(lastAgent.card) : ""}
         <button class="primary block" data-go="home">Done</button>`;
       return;
     }
     if (!qr) {
-      b.innerHTML = `<div class="empty"><p class="big">No QR to pay yet</p><p class="note">Press "Show payment QR" on the merchant POS, then come back here.</p></div>`;
+      b.innerHTML = `<div class="empty"><p class="big">No QR yet</p><p class="note">Press "Show payment QR" on the merchant POS.</p></div>`;
       return;
     }
-    const m = S.merchants.find(v => v.merchant_id === qr.merchant_id) || { name: qr.merchant_id, status: "UNKNOWN" };
-    let pv = null, err = null;
-    let ver = null;
+    const m = S.merchants.find(v => v.merchant_id === qr.merchant_id) || { name: qr.merchant_id };
+    let ver = null, pv = null, err = null;
     try { ver = await api("POST", "/api/qr/verify", { qr }); } catch (e) { ver = null; }
     try { pv = await api("POST", "/api/pay/preview", { user: cur, qr, use_points: usePts }); } catch (e) { err = e; }
-    const s = U().session;
-    b.innerHTML = `<div class="merchant-head"><div class="mname">${esc(m.name)}</div>${m.status === "ACTIVE" ? '<span class="pill ok">Approved store</span>' : '<span class="pill bad">Not approved</span>'}</div>
+    const u = U();
+    b.innerHTML = `<div class="merchant-head"><div class="mname">${esc(m.name)}</div>${ver ? verifyHTML(ver) : ""}</div>
       <div class="pay-amount">$${esc(qr.amount_usdc)}</div>
-      ${ver ? verifyHTML(ver) : ""}
-      <div class="row-set"><div><div class="t">Use points first</div><p class="note">${fmtP(U().points)} P available</p></div><label class="switch" aria-label="Use points first"><input type="checkbox" id="pay-pts" ${usePts ? "checked" : ""}><span></span></label></div>
+      <div class="row-set"><div><div class="t">Use points</div><p class="note">${fmtP(u.points)} available</p></div><label class="switch" aria-label="Use points"><input type="checkbox" id="pay-pts" ${usePts ? "checked" : ""}><span></span></label></div>
       ${pv ? `<div class="lines">
-        <span>Points</span><span class="n">−$${fmtU(pv.point_discount_micro)}</span>
+        ${pv.points_used ? `<span>Points</span><span class="n">−$${fmtU(pv.point_discount_micro)}</span>` : ""}
         <span class="tot">You pay</span><span class="n tot">$${fmtU(pv.paid_micro)}</span>
-        <span class="pt">You earn</span><span class="n pt">+${fmtP(pv.points_earned)} P</span>
+        <span class="pt">You earn</span><span class="n pt">+${fmtP(pv.points_earned)} points</span>
       </div>` : ""}
-      ${err ? `<div class="alert bad"><span>${esc(friendly(err))}</span><span class="code">${esc(err.code || "")}</span></div>` : ""}
-      <button class="primary block" id="pay-go">${pv ? "Pay $" + fmtU(pv.paid_micro) : "Try to pay"}</button>
-      <p class="note center">${s.active ? "Tap to pay: no wallet popup, network fee covered" : "Your wallet will ask you to sign"}</p>`;
+      ${err ? `<div class="alert">${esc(friendly(err))}</div>` : ""}
+      <button class="primary block" id="pay-go">${pv ? "Pay $" + fmtU(pv.paid_micro) : "Try to pay"}</button>`;
     $("pay-pts").onchange = e => { usePts = e.target.checked; renderPay(); };
     $("pay-go").onclick = doPay;
-  }
-  const ICON_OK = '<svg viewBox="0 0 24 24"><path d="M5 12l5 5L19 7"/></svg>';
-  const ICON_BAD = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>';
-  function verifyHTML(v) {
-    return `<div class="checks"><div class="hd"><span>QR verification</span>${v.valid ? '<span class="pill ok">Verified</span>' : '<span class="pill bad">Failed</span>'}</div>` +
-      v.checks.map(c => `<div class="chk-row ${c.ok ? "ok" : "bad"}"><span class="ic2">${c.ok ? ICON_OK : ICON_BAD}</span><span>${esc(c.name)}</span><span class="dt">${esc(c.detail)}</span></div>`).join("") + `</div>`;
   }
   async function doPay() {
     try {
@@ -724,8 +667,6 @@ footer.foot a.cosmos { color: var(--fg); }
   }
 
   // ---------- top up ----------
-  document.querySelectorAll("[data-amt]").forEach(b => b.onclick = () => { $("tu-amt").value = b.dataset.amt; quoteTopup(); });
-  $("tu-amt").oninput = () => { clearTimeout(tuTimer); tuTimer = setTimeout(quoteTopup, 400); };
   const SOURCES = [
     { id: "injective-1", sym: "USDC.inj", on: "Injective - Cosmos" },
     { id: "8453", sym: "USDC", on: "Base" },
@@ -735,7 +676,7 @@ footer.foot a.cosmos { color: var(--fg); }
   let tuChain = SOURCES[0].id;
   const USDC_ICON = '<svg class="coin" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="16" fill="#2775ca"/><circle cx="16" cy="16" r="10.5" fill="none" stroke="#fff" stroke-width="1.6"/><text x="16" y="21" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="13" font-weight="700" fill="#fff">$</text></svg>';
   const CHEV = '<span class="chev"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></span>';
-  const srcHTML = s => `<span class="asset-row"><span class="pill2">${USDC_ICON}<span class="sym">${esc(s.sym)}</span></span></span><span class="on">on ${esc(s.on)}</span>`;
+  const srcHTML = s => `<span class="pill2">${USDC_ICON}<span class="sym">${esc(s.sym)}</span></span><span class="on">on ${esc(s.on)}</span>`;
   function renderAssetPick() {
     const s = SOURCES.find(x => x.id === tuChain);
     $("tu-asset").innerHTML = `<span class="asset-col">${srcHTML(s)}</span>${CHEV}`;
@@ -750,18 +691,19 @@ footer.foot a.cosmos { color: var(--fg); }
     $("tu-list").hidden = !open; $("tu-asset").setAttribute("aria-expanded", String(open));
   };
   renderAssetPick();
+  document.querySelectorAll("[data-amt]").forEach(b => b.onclick = () => { $("tu-amt").value = b.dataset.amt; quoteTopup(); });
+  $("tu-amt").oninput = () => { clearTimeout(tuTimer); tuTimer = setTimeout(quoteTopup, 400); };
   const tuReq = () => ({ user: cur, chain: tuChain, amount_usdc: Number($("tu-amt").value) });
   async function quoteTopup() {
     try {
       const q = await api("POST", "/api/topup/quote", tuReq());
-      $("tu-quote").innerHTML = `<div class="lines"><span>You send</span><span class="n">${fmtU(q.amount_micro)} ${esc(q.denom)} on ${esc(q.name)}</span><span>${q.chain === "injective-1" ? "Direct deposit" : "Route fee"}</span><span class="n">−${fmtU(q.fee_micro)}</span><span class="tot">Added to balance</span><span class="n tot">${fmtU(q.out_micro)} USDC.inj</span></div>`;
+      $("tu-quote").innerHTML = `<div class="lines"><span>You send</span><span class="n">${fmtU(q.amount_micro)} ${esc(q.denom)}</span><span>${q.chain === "injective-1" ? "Fee" : "Route fee"}</span><span class="n">−${fmtU(q.fee_micro)}</span><span class="tot">Added to balance</span><span class="n tot">$${fmtU(q.out_micro)}</span></div>`;
       $("tu-go").textContent = `Top up $${fmtU(q.out_micro)}`;
       $("tu-go").disabled = false;
     } catch (e) {
-      $("tu-quote").innerHTML = `<div class="alert bad">${esc(friendly(e))}</div>`;
+      $("tu-quote").innerHTML = `<div class="alert">${esc(friendly(e))}</div>`;
       $("tu-go").disabled = true;
     }
-    refresh();
   }
   $("tu-go").onclick = async () => {
     try { const q = await api("POST", "/api/topup", tuReq()); toast(`Added $${fmtU(q.out_micro)} to your balance`); go("home"); }
@@ -775,17 +717,16 @@ footer.foot a.cosmos { color: var(--fg); }
   async function renderRedeem() {
     const u = U();
     const p = Math.max(0, Math.floor(Number($("rd-pt").value) || 0));
-    $("rd-avail").textContent = `${fmtP(u.points)} P available`;
+    $("rd-avail").textContent = `${fmtP(u.points)} available`;
     const rows = await api("GET", "/api/redeem/quote?points=" + p);
-    const dest = { ATOM: "to your Cosmos Hub wallet", INJ: "to your Injective wallet", USDC_INJ: "back to your balance · +1% points next payment" };
+    const dest = { ATOM: "to your Cosmos Hub wallet", INJ: "to your Injective wallet", USDC_INJ: "to your balance, +1% points next payment" };
     $("rd-opts").innerHTML = rows.map(q => `<label class="opt ${q.asset === redeemTarget ? "sel" : ""}">
       <input type="radio" name="rd" value="${q.asset}" ${q.asset === redeemTarget ? "checked" : ""}>
-      <div><div class="t">${esc(q.label)} ${q.best ? '<span class="pill ok">Best value</span>' : ""} ${q.boost_bps ? `<span class="pill acc">+${q.boost_bps / 100}% bonus</span>` : ""}</div><p class="note">${dest[q.asset]}</p></div>
+      <div><div class="t">${esc(q.label)} ${q.best ? '<span class="pill ok">Best value</span>' : ""}</div><p class="note">${dest[q.asset]}</p></div>
       <div class="v"><b>${amt(q.asset, q.amount)}</b><span class="note">$${(q.net_micro / MICRO).toFixed(2)}</span></div></label>`).join("");
     $("rd-opts").querySelectorAll("input").forEach(r => r.onchange = () => { redeemTarget = r.value; renderRedeem(); });
     const sel = rows.find(q => q.asset === redeemTarget);
-    const ok = p > 0 && p <= u.points;
-    $("rd-go").disabled = !ok;
+    $("rd-go").disabled = !(p > 0 && p <= u.points);
     $("rd-go").textContent = !p ? "Enter points" : p > u.points ? "Not enough points" : `Get ${amt(sel.asset, sel.amount)} ${sel.label}`;
   }
   $("rd-go").onclick = async () => {
@@ -805,26 +746,28 @@ footer.foot a.cosmos { color: var(--fg); }
   }
   $("wd-max").onclick = () => { $("wd-amt").value = fmtU(U().usdc_micro); };
   $("wd-go").onclick = async () => {
-    try { await api("POST", "/api/withdraw", { user: cur, amount_usdc: Number($("wd-amt").value) }); toast(`Withdrew $${Number($("wd-amt").value).toFixed(2)} to your wallet`); $("wd-amt").value = ""; go("home"); }
+    try { await api("POST", "/api/withdraw", { user: cur, amount_usdc: Number($("wd-amt").value) }); toast(`Withdrew $${Number($("wd-amt").value).toFixed(2)}`); $("wd-amt").value = ""; go("home"); }
     catch (e) { toast(friendly(e), "bad"); }
     await refresh();
   };
 
   // ---------- settings ----------
   function loadSettings() {
-    const u = U(), p = u.policy;
-    $("st-ptx").value = u.session.per_tx_micro / MICRO; $("st-day").value = u.session.daily_micro / MICRO;
-    $("st-auto").checked = p.auto; $("st-min").value = p.threshold;
-    $("st-w-atom").value = p.weights.ATOM; $("st-w-usdc").value = p.weights.USDC_INJ; $("st-w-inj").value = p.weights.INJ;
+    const u = U(), s = u.session;
+    $("fp-toggle").checked = s.active;
+    $("fp-note").textContent = s.active ? `No wallet popup at the counter · $${fmtU(s.spent_today_micro)} used today` : "Off · your wallet asks to sign each payment";
+    $("st-ptx").value = s.per_tx_micro / MICRO; $("st-day").value = s.daily_micro / MICRO;
+    $("st-min").value = u.policy.threshold;
     showErr("st-err", null);
   }
+  $("fp-toggle").onchange = async e => {
+    try { await api("POST", "/api/session", { user: cur, active: e.target.checked }); toast(e.target.checked ? "Tap to pay is on" : "Tap to pay is off"); }
+    catch (x) { toast(friendly(x), "bad"); }
+    await refresh(); loadSettings();
+  };
   $("st-save").onclick = async () => {
     try {
-      await api("POST", "/api/policy", {
-        user: cur, per_tx_usdc: Number($("st-ptx").value), daily_usdc: Number($("st-day").value),
-        auto: $("st-auto").checked, threshold: Math.floor(Number($("st-min").value)),
-        weights: { ATOM: Number($("st-w-atom").value), USDC_INJ: Number($("st-w-usdc").value), INJ: Number($("st-w-inj").value) },
-      });
+      await api("POST", "/api/policy", { user: cur, per_tx_usdc: Number($("st-ptx").value), daily_usdc: Number($("st-day").value), threshold: Math.floor(Number($("st-min").value)) });
       toast("Settings saved"); go("home");
     } catch (e) { showErr("st-err", e); }
     await refresh();
@@ -833,7 +776,7 @@ footer.foot a.cosmos { color: var(--fg); }
   // ---------- merchant POS ----------
   function renderPos() {
     const sel = $("pos-merchant").value;
-    $("pos-merchant").innerHTML = S.merchants.map(m => `<option value="${esc(m.merchant_id)}">${esc(m.name)}${m.status === "ACTIVE" ? "" : " (not approved)"}</option>`).join("");
+    $("pos-merchant").innerHTML = S.merchants.map(m => `<option value="${esc(m.merchant_id)}">${esc(m.name)}${m.status === "ACTIVE" ? "" : " (suspended)"}</option>`).join("");
     if (sel) $("pos-merchant").value = sel;
   }
   function hash(str) { let h = 2166136261; for (const c of str) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; }
@@ -854,56 +797,53 @@ footer.foot a.cosmos { color: var(--fg); }
   function posTick() {
     if (!$("pos-qr").dataset.exp) return;
     const left = Number($("pos-qr").dataset.exp) - Math.floor(Date.now() / 1000);
-    $("pos-status").innerHTML = posPaid ? '<span class="pill ok">Paid</span>' : left > 0 ? `<span class="pill acc">Waiting for payment · ${left}s</span>` : '<span class="pill bad">Expired · show a new QR</span>';
+    $("pos-status").innerHTML = posPaid ? '<span class="pill ok">Paid</span>' : left > 0 ? `<span class="pill acc">Waiting · ${left}s</span>` : '<span class="pill bad">Expired</span>';
     if (posPaid || left <= 0) clearInterval(timerId);
   }
-  function showQr(p, m) {
+  function showQr(p) {
+    const m = S.merchants.find(v => v.merchant_id === p.merchant_id);
+    $("pos-store").textContent = m.name;
     $("pos-amount").textContent = "$" + p.amount_usdc;
-    $("qr-json").textContent = JSON.stringify(p, null, 2) + `\n\nRegistry key for ${m.merchant_id} (ed25519):\n${m.pubkey}`;
+    $("qr-json").textContent = JSON.stringify(p, null, 2) + `\n\nStore key (ed25519): ${m.pubkey}`;
     drawQr(JSON.stringify(p));
   }
-  $("pos-tamper").onclick = () => {
-    if (!qr) return;
-    qr = { ...qr, amount_usdc: "1.00" };
-    $("pos-tamper").disabled = true;
-    showQr(qr, S.merchants.find(v => v.merchant_id === qr.merchant_id));
-    toast("QR forged: amount changed to $1.00. Try to pay it in the app.", "bad");
-  };
+  $("pos-merchant").onchange = () => renderMerchant();
   $("pos-gen").onclick = async () => {
     let p;
     try { p = await api("POST", "/api/qr", { merchant_id: $("pos-merchant").value, amount_usdc: Number($("pos-amt").value) }); showErr("pos-err", null); }
     catch (e) { showErr("pos-err", e); return; }
     qr = p; posPaid = false; payDone = null;
-    const m = S.merchants.find(v => v.merchant_id === p.merchant_id);
-    $("pos-qr").hidden = false; $("pos-details").hidden = false; $("pos-tools").hidden = false;
-    $("pos-tamper").disabled = false;
+    $("pos-qr").hidden = false; $("pos-details").hidden = false;
     $("pos-qr").dataset.exp = p.expires_at;
-    $("pos-store").textContent = m.name;
-    showQr(p, m);
+    showQr(p);
+    $("demo-forge").disabled = false;
     clearInterval(timerId); posTick(); timerId = setInterval(posTick, 1000);
     toast("QR ready. Tap Pay in the app.");
   };
+  $("demo-forge").onclick = () => {
+    if (!qr) return;
+    qr = { ...qr, amount_usdc: "1.00" };
+    $("demo-forge").disabled = true;
+    showQr(qr);
+    toast("QR forged: amount set to $1.00. Try to pay it.", "bad");
+  };
 
-  // ---------- merchant dashboard ----------
-  const kpi = (k, v, s) => `<div class="kpi"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div>${s ? `<div class="s">${esc(s)}</div>` : ""}</div>`;
-  $("pos-merchant").onchange = () => renderMerchantDash();
-  function renderMerchantDash() {
+  // ---------- merchant: today ----------
+  function renderMerchant() {
     const id = $("pos-merchant").value || S.merchants[0].merchant_id;
     const m = S.merchants.find(x => x.merchant_id === id);
     $("md-title").textContent = m.name;
     $("md-status").innerHTML = m.status === "ACTIVE" ? '<span class="pill ok">Approved</span>' : '<span class="pill bad">Suspended</span>';
     $("md-kpis").innerHTML =
-      kpi("Sales", "$" + fmtU(m.sales_micro), `${m.orders} orders`) +
-      kpi("Received", "$" + fmtU(m.received_micro), "settled instantly, after refunds") +
-      kpi("Fees paid", "$" + fmtU(m.fees_micro), `${(m.fee_bps / 100).toFixed(1)}% of USDC paid`) +
-      kpi("Point discounts", "$" + fmtU(m.point_comp_micro), "paid to you by the reward pool");
+      kpi("Sales", "$" + fmtU(m.sales_micro), plural(m.orders, "order")) +
+      kpi("Received", "$" + fmtU(m.received_micro), `after ${(m.fee_bps / 100).toFixed(1)}% fee`);
     const pays = [];
     S.users.forEach((u, ui) => u.history.forEach(h => { if (h.type === "PAY" && h.merchant_id === id) pays.push({ ...h, who: u.name, ui }); }));
     pays.sort((a, b) => new Date(b.time) - new Date(a.time));
-    if (!pays.length) { $("md-list").innerHTML = `<div class="empty"><p class="note">No payments yet. Show a QR and pay from the app.</p></div>`; return; }
-    $("md-list").innerHTML = pays.slice(0, 6).map(h => {
+    if (!pays.length) { $("md-list").innerHTML = `<div class="empty"><p class="note">No payments yet.</p></div>`; return; }
+    $("md-list").innerHTML = pays.slice(0, 5).map(h => {
       const right = h.status === "CANCELLED" ? '<span class="pill bad">Refunded</span>' : h.refundable ? `<button class="link" data-mrefund="${h.ui}:${h.id}">Refund</button>` : '<span class="pill mute">Settled</span>';
-      return `<div class="it"><span class="d">${esc(h.who)} · $${fmtU(h.order_micro || 0)}</span><span class="amt">${esc(h.note || "")}</span><span class="sub2"><span>${hhmm(h.time)} · ${esc(h.order_id)}</span><span class="acts">${txLink(h.tx_hash, "Mintscan")}${right}</span></span></div>`;
+      return `<div class="it"><span class="d">${esc(h.who)}</span><span class="amt">$${fmtU(h.order_micro || 0)}</span><span class="sub2"><span>${hhmm(h.time)}</span><span class="acts">${txLink(h.tx_hash)}${right}</span></span></div>`;
     }).join("");
     $("md-list").querySelectorAll("[data-mrefund]").forEach(b => b.onclick = async () => {
       const [ui, hid] = b.dataset.mrefund.split(":").map(Number);
@@ -913,45 +853,26 @@ footer.foot a.cosmos { color: var(--fg); }
     });
   }
 
-  // ---------- overview ----------
-  function renderOverview() {
+  // ---------- operator ----------
+  function renderOperator() {
     const st = S.stats, p = S.pool;
-    const outstanding = S.users.reduce((s, u) => s + u.points, 0);
-    const avg = st.payments ? st.gmv_micro / st.payments : 0;
-    const cov = p.liability_micro > 0 ? p.balance_micro / p.liability_micro : Infinity;
-    const rejected = Object.values(st.rejected).reduce((s, n) => s + n, 0);
-    $("ov-kpis").innerHTML =
-      kpi("Sales volume", "$" + fmtU(st.gmv_micro), `${st.payments} payments · avg $${fmtU(avg)}`) +
-      kpi("Paid in USDC", "$" + fmtU(st.paid_usdc_micro), `$${fmtU(st.point_discount_micro)} covered by points`) +
-      kpi("Top-ups", "$" + fmtU(st.topup_micro), `${st.topups} deposits`) +
-      kpi("Refunds", "$" + fmtU(st.refunded_micro), `${st.refunds} refunds`) +
-      kpi("Points minted", fmtP(st.points_minted) + " P", `${fmtP(st.points_burned)} P burned`) +
-      kpi("Points outstanding", fmtP(outstanding) + " P", `pool coverage ${isFinite(cov) ? (cov * 100).toFixed(0) + "%" : "n/a"}`) +
-      kpi("Merchant fees", "$" + fmtU(p.fees_in_micro), "into the reward pool") +
-      kpi("Blocked payments", String(rejected), "nothing charged");
-
     const assets = [["ATOM", "ATOM", "var(--accent)"], ["INJ", "INJ", "var(--pt)"], ["USDC_INJ", "USDC.inj", "var(--muted)"]];
     const total = assets.reduce((s, [a]) => s + st.redeemed[a].value_micro, 0);
-    $("ov-atom-share").textContent = total ? `ATOM ${(st.redeemed.ATOM.value_micro / total * 100).toFixed(0)}% of value` : "no redemptions yet";
-    $("ov-bars").innerHTML = assets.map(([a, label, col]) => {
+    const atomShare = total ? (st.redeemed.ATOM.value_micro / total * 100).toFixed(0) + "%" : "–";
+    const blocked = Object.values(st.rejected).reduce((s, n) => s + n, 0);
+    $("op-kpis").innerHTML =
+      kpi("Sales volume", "$" + fmtU(st.gmv_micro), plural(st.payments, "payment")) +
+      kpi("ATOM share", atomShare, "of redeemed value") +
+      kpi("Points earned", fmtP(st.points_minted), `$${fmtU(st.paid_usdc_micro)} paid in USDC`) +
+      kpi("Blocked payments", String(blocked), "nothing charged");
+
+    $("op-atom-share").textContent = total ? `ATOM ${atomShare} of value` : "none yet";
+    $("op-bars").innerHTML = assets.map(([a, label, col]) => {
       const r = st.redeemed[a];
       const pct = total ? r.value_micro / total * 100 : 0;
-      return `<div class="bar"><span>${label}</span><span class="tr"><i style="width:${pct.toFixed(1)}%;background:${col}"></i></span><span class="n">$${fmtU(r.value_micro)} · ${fmtP(r.points)} P</span></div>`;
+      return `<div class="bar"><span>${label}</span><span class="tr"><i style="width:${pct.toFixed(1)}%;background:${col}"></i></span><span class="n">$${fmtU(r.value_micro)}</span></div>`;
     }).join("");
 
-    const stores = [...S.merchants].sort((a, b) => b.sales_micro - a.sales_micro);
-    $("ov-stores").innerHTML = `<thead><tr><th>Store</th><th class="n">Orders</th><th class="n">Sales</th><th class="n">Refunds</th></tr></thead><tbody>` +
-      stores.map(m => `<tr><td>${esc(m.name)}${m.status === "ACTIVE" ? "" : ' <span class="pill bad">Suspended</span>'}</td><td class="n">${m.orders}</td><td class="n">$${fmtU(m.sales_micro)}</td><td class="n">${m.refunds}</td></tr>`).join("") + `</tbody>`;
-
-    const rows = Object.entries(st.rejected).sort((a, b) => b[1] - a[1]);
-    $("ov-rejected").innerHTML = rows.length
-      ? rows.map(([code, n]) => `<div class="rej"><span>${esc(FRIENDLY[code] ? FRIENDLY[code].split(".")[0] : code)}<br><span class="note mono">${esc(code)}</span></span><b>${n}</b></div>`).join("")
-      : `<p class="note">No blocked payments yet. Try a suspended store or a forged QR.</p>`;
-  }
-
-  // ---------- behind the scenes ----------
-  function renderBehind() {
-    const p = S.pool;
     const cov = p.liability_micro > 0 ? p.balance_micro / p.liability_micro : Infinity;
     const col = cov >= 1 ? "var(--ok)" : cov >= 0.5 ? "var(--warn)" : "var(--bad)";
     $("rp-bal").textContent = "$" + fmtU(p.balance_micro);
@@ -960,17 +881,20 @@ footer.foot a.cosmos { color: var(--fg); }
     $("rp-m").style.width = Math.min(100, isFinite(cov) ? cov * 100 : 100) + "%";
     $("rp-m").style.background = col;
     $("rp-in").textContent = "+$" + fmtU(p.fees_in_micro);
-    $("rp-disc").textContent = "−$" + fmtU(p.discount_out_micro);
-    $("rp-out").textContent = "−$" + fmtU(p.redeem_out_micro);
-    $("rp-vaults").textContent = "$" + fmtU(p.vaults_micro);
-    $("fg-bal").textContent = p.gas_inj.toFixed(4) + " INJ";
+    $("rp-out").textContent = "−$" + fmtU(p.discount_out_micro + p.redeem_out_micro);
     $("rp-pause").textContent = p.paused ? "Resume rewards" : "Pause rewards";
 
-    $("wl").innerHTML = `<thead><tr><th>Store</th><th>Status</th><th class="n">Fee</th><th class="n">Points</th><th class="n">Received</th></tr></thead><tbody>` +
-      S.merchants.map(m => `<tr><td>${esc(m.name)}</td><td><button class="sm" data-m="${esc(m.merchant_id)}"><span class="pill ${m.status === "ACTIVE" ? "ok" : "bad"}">${m.status === "ACTIVE" ? "Approved" : "Suspended"}</span></button></td><td class="n">${(m.fee_bps / 100).toFixed(1)}%</td><td class="n">${(m.point_earn_bps / 100).toFixed(1)}%</td><td class="n">$${fmtU(m.received_micro)}</td></tr>`).join("") + `</tbody>`;
-    $("wl").querySelectorAll("[data-m]").forEach(b => b.onclick = async () => { await api("POST", "/api/merchants/status", { merchant_id: b.dataset.m }).catch(() => {}); await refresh(); });
+    const stores = [...S.merchants].sort((a, b) => b.sales_micro - a.sales_micro);
+    $("op-stores").innerHTML = `<thead><tr><th>Store</th><th>Status</th><th class="n">Orders</th><th class="n">Sales</th><th class="n">Fee</th></tr></thead><tbody>` +
+      stores.map(m => `<tr><td>${esc(m.name)}</td><td><button class="sm" data-m="${esc(m.merchant_id)}"><span class="pill ${m.status === "ACTIVE" ? "ok" : "bad"}">${m.status === "ACTIVE" ? "Approved" : "Suspended"}</span></button></td><td class="n">${m.orders}</td><td class="n">$${fmtU(m.sales_micro)}</td><td class="n">${(m.fee_bps / 100).toFixed(1)}%</td></tr>`).join("") + `</tbody>`;
+    $("op-stores").querySelectorAll("[data-m]").forEach(b => b.onclick = async () => { await api("POST", "/api/merchants/status", { merchant_id: b.dataset.m }).catch(() => {}); await refresh(); });
 
-    $("log").innerHTML = S.events.filter(ev => ev.tx_hash).map(ev => `<div class="ev ev-${esc(ev.kind)}"><div class="h"><span>${esc(ev.msg)}</span><span class="m">${esc(ev.signer)}</span><span class="t">${hhmm(ev.time)}</span></div><div class="b">${esc(ev.body)}</div>${txLink(ev.tx_hash)}</div>`).join("");
+    const rows = Object.entries(st.rejected).sort((a, b) => b[1] - a[1]);
+    $("op-rejected").innerHTML = rows.length
+      ? rows.map(([code, n]) => `<div class="rej"><span>${esc(FRIENDLY[code] ? FRIENDLY[code].split(".")[0] : code)}</span><b>${n}</b></div>`).join("")
+      : `<p class="note">None yet. Try a suspended store or a forged QR.</p>`;
+
+    $("log").innerHTML = S.events.filter(ev => ev.tx_hash).map(ev => `<div class="ev ev-${esc(ev.kind)}"><div class="h"><span>${esc(ev.msg)}</span><span class="m">${esc(ev.signer)}</span><span class="t">${hhmm(ev.time)}</span></div><div class="b">${esc(ev.body)}</div>${txLink(ev.tx_hash, "Tx " + ev.tx_hash.slice(0, 8) + "…")}</div>`).join("");
   }
   $("rp-apply").onclick = async () => { await api("POST", "/api/pool/cap", { cap_usdc: Number($("rp-cap").value) }).catch(() => {}); await refresh(); };
   $("rp-fund").onclick = async () => { await api("POST", "/api/pool/fund", {}); await refresh(); };

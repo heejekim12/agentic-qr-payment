@@ -40,9 +40,9 @@ func New() *Engine {
 	}
 	e := &Engine{
 		users: []*User{
-			newUser("Minji", "inj1user987654321", "cosmos1user9876543", 25, 1200, false),
-			newUser("Jaehyun", "inj1user123450987", "cosmos1user1234509", 80, 80, true),
-			newUser("Sora", "inj1user555000111", "cosmos1user5550001", 5, 3400, false),
+			newUser("Minji", "inj1user987654321", "cosmos1user9876543", 25, 1200),
+			newUser("Jaehyun", "inj1user123450987", "cosmos1user1234509", 80, 80),
+			newUser("Sora", "inj1user555000111", "cosmos1user5550001", 5, 3400),
 		},
 		merchants: []*Merchant{
 			{ID: "MRC_CAFE_001", Name: "Seongsu Roastery Cafe", Category: "CAFE", Status: StatusActive, SettlementAddr: "inj1abc...xyz", FeeBps: 150, PointEarnBps: 300},
@@ -80,12 +80,12 @@ func New() *Engine {
 	return e
 }
 
-func newUser(name, addr, cosmos string, usdc, points int64, auto bool) *User {
+func newUser(name, addr, cosmos string, usdc, points int64) *User {
 	return &User{
 		Name: name, Addr: addr, CosmosAddr: cosmos, demoAddr: addr, demoCosmos: cosmos,
 		USDC: usdc * Micro, Points: points, INJ: 0.05,
 		Session: Session{Active: true, PerTx: 50 * Micro, Daily: 200 * Micro},
-		Policy:  Policy{Auto: auto, Threshold: 500, Weights: map[Asset]float64{ATOM: 0.5, USDCINJ: 0.3, INJ: 0.2}},
+		Policy:  Policy{Threshold: 500},
 		History: []*HistoryEntry{},
 	}
 }
